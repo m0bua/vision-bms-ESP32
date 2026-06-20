@@ -1,0 +1,43 @@
+rest:
+  - resource: http://192.168.0.110/ha.json
+    scan_interval: 10
+    sensor:
+      - name: BMS Online
+        value_template: "{{ value_json.online }}"
+      - name: BMS Health
+        value_template: "{{ value_json.health_text }}"
+      - name: BMS Operating State
+        value_template: "{{ value_json.operating_text }}"
+      - name: BMS Pack Voltage
+        value_template: "{{ value_json.pack_voltage_v }}"
+        unit_of_measurement: "V"
+      - name: BMS Current
+        value_template: "{{ value_json.current_a }}"
+        unit_of_measurement: "A"
+      - name: BMS SOC
+        value_template: "{{ value_json.soc_pct }}"
+        unit_of_measurement: "%"
+      - name: BMS SOH
+        value_template: "{{ value_json.soh_pct }}"
+        unit_of_measurement: "%"
+      - name: BMS Env Temp
+        value_template: "{{ value_json.env_temp_c }}"
+        unit_of_measurement: "°C"
+      - name: BMS Max Cell Temp
+        value_template: "{{ value_json.max_cell_temp_c }}"
+        unit_of_measurement: "°C"
+      - name: BMS Remaining Ah
+        value_template: "{{ value_json.remaining_ah }}"
+        unit_of_measurement: "Ah"
+      - name: BMS Min Cell Voltage
+        value_template: "{{ value_json.cell_min_v }}"
+        unit_of_measurement: "V"
+      - name: BMS Avg Cell Voltage
+        value_template: "{{ value_json.cell_avg_v }}"
+        unit_of_measurement: "V"
+      - name: BMS Max Cell Voltage
+        value_template: "{{ value_json.cell_max_v }}"
+        unit_of_measurement: "V"
+      - name: BMS Cell Delta
+        value_template: "{{ value_json.cell_delta_v }}"
+        unit_of_measurement: "V"
