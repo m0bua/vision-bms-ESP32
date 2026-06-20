@@ -33,7 +33,9 @@ struct BmsSnapshot {
   uint16_t status = 0;
   uint16_t warning = 0;
   uint16_t protect = 0;
-  uint16_t errorCode = 0;
+  uint16_t cycles = 0;
+  uint16_t reservedStatus = 0;
+  uint16_t cellCount = 0;
   uint16_t cellTempBytes[3] = {0, 0, 0};
   uint16_t cellsV[15] = {0};
   float cellVolts[15] = {0.0f};
@@ -41,7 +43,6 @@ struct BmsSnapshot {
   float maxCellV = 0.0f;
   float avgCellV = 0.0f;
   float cellDeltaV = 0.0f;
-  uint32_t cycles = 0;
   uint32_t fullChargeCapacity = 0;
 
   uint16_t rawRegs[BMS_RAW_REGS] = {0};
@@ -111,17 +112,11 @@ String batteryStateText() {
 }
 
 String healthText() {
-  if (bms.errorCode != 0) {
-    return "Fault";
+  if (bms.warning != 0) {
+    return "Warnings";
   }
   if (bms.protect != 0) {
-    return "Protect";
-  }
-  if (bms.warning != 0) {
-    return "Warning";
-  }
-  if (bms.status != 0) {
-    return "Active";
+    return "Protections";
   }
   return "Normal";
 }
@@ -130,17 +125,14 @@ String operatingStateText() {
   if (!bms.online) {
     return "Offline";
   }
-  if (bms.errorCode != 0) {
-    return "Fault";
-  }
-  if (bms.warning == 2 && bms.protect == 4096 && bms.status == 0 && fabs(bms.current) < 0.5f && bms.soc >= 95) {
+  if ((bms.status & 0x1000) != 0) {
     return "Standby";
-  }
-  if (bms.protect != 0) {
-    return "Protect";
   }
   if (bms.warning != 0) {
     return "Warning";
+  }
+  if (bms.protect != 0) {
+    return "Protect";
   }
   if (bms.status != 0) {
     return "Active";
@@ -149,17 +141,11 @@ String operatingStateText() {
 }
 
 String healthClass() {
-  if (bms.errorCode != 0) {
-    return "bad";
-  }
-  if (bms.protect != 0) {
-    return "warn";
-  }
   if (bms.warning != 0) {
     return "warn";
   }
-  if (bms.status != 0) {
-    return "ok";
+  if (bms.protect != 0) {
+    return "warn";
   }
   return "soft";
 }
@@ -202,11 +188,12 @@ void decodeSnapshot() {
   bms.maxChargeCurrentLimit = bms.rawRegs[0x16];
   bms.soh = bms.rawRegs[0x17];
   bms.soc = bms.rawRegs[0x18];
-  bms.status = bms.rawRegs[0x19];
-  bms.warning = bms.rawRegs[0x1A];
-  bms.protect = bms.rawRegs[0x1B];
-  bms.errorCode = bms.rawRegs[0x1C];
-  bms.cycles = ((uint32_t)bms.rawRegs[0x1D] << 16) | bms.rawRegs[0x1E];
+  bms.warning = bms.rawRegs[0x19];
+  bms.protect = bms.rawRegs[0x1A];
+  bms.status = bms.rawRegs[0x1B];
+  bms.cycles = bms.rawRegs[0x1C];
+  bms.reservedStatus = bms.rawRegs[0x1D];
+  bms.cellCount = bms.rawRegs[0x1E];
   bms.fullChargeCapacity = ((uint32_t)bms.rawRegs[0x1F] << 16) | bms.rawRegs[0x20];
   bms.cellTempBytes[0] = bms.rawRegs[0x21];
   bms.cellTempBytes[1] = bms.rawRegs[0x22];
@@ -510,7 +497,11 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         setText('cellMax', fmt(data.cell_max_v || 0, 3) + ' V');
         setText('cellDelta', fmt(data.cell_delta_v || 0, 3) + ' V');
         setText('healthText', data.operating_text || data.health_text || '-');
-        setText('flagText', (data.warning ? 'W' : '-') + ' ' + (data.protect ? 'P' : '-') + ' ' + (data.error_code ? 'E' : '-') + ' ' + (data.status ? 'S' : '-'));
+        setText('flagText', 'W ' + hex16(data.warning || 0) +
+          '  P ' + hex16(data.protect || 0) +
+          '  S ' + hex16(data.status || 0) +
+          '  C ' + String(data.cycles ?? '-') +
+          '  N ' + String(data.cell_count ?? '-'));
 
         const soc = clamp(Number(data.soc || 0), 0, 100);
         byId('socBar').style.width = soc + '%';
@@ -552,10 +543,12 @@ void handleDiag() {
   html += "<div>Status: " + String(bms.online ? "ONLINE" : "OFFLINE") + " | Errors: " + String(bms.errorCount) + "</div>";
   html += "<div>Operating state: " + operatingStateText() + "</div>";
   html += "<div>Health: <span class='" + healthClass() + "'>" + healthText() + "</span></div>";
-  html += "<div>Flags: <span class='soft'>S</span> " + formatHex16(bms.status) +
-          " | <span class='soft'>W</span> " + formatHex16(bms.warning) +
+  html += "<div>Flags: <span class='soft'>W</span> " + formatHex16(bms.warning) +
           " | <span class='soft'>P</span> " + formatHex16(bms.protect) +
-          " | <span class='soft'>E</span> " + formatHex16(bms.errorCode) + "</div>";
+          " | <span class='soft'>S</span> " + formatHex16(bms.status) +
+          " | <span class='soft'>C</span> " + formatHex16(bms.cycles) +
+          " | <span class='soft'>R</span> " + formatHex16(bms.reservedStatus) +
+          " | <span class='soft'>N</span> " + formatHex16(bms.cellCount) + "</div>";
   html += "<div>CRC rx: " + formatHex16(bms.crcReceived) + " | CRC calc: " + formatHex16(bms.crcCalculated) + "</div>";
   html += "<div><a href='/'>Back to dashboard</a></div>";
   html += "</div>";
@@ -607,7 +600,9 @@ void handleJson() {
   json += "\"status\":" + String(bms.status) + ",";
   json += "\"warning\":" + String(bms.warning) + ",";
   json += "\"protect\":" + String(bms.protect) + ",";
-  json += "\"error_code\":" + String(bms.errorCode) + ",";
+  json += "\"cycles\":" + String(bms.cycles) + ",";
+  json += "\"reserved_status\":" + String(bms.reservedStatus) + ",";
+  json += "\"cell_count\":" + String(bms.cellCount ? bms.cellCount : 15) + ",";
   json += "\"cell_min_v\":" + String(bms.minCellV, 3) + ",";
   json += "\"cell_avg_v\":" + String(bms.avgCellV, 3) + ",";
   json += "\"cell_max_v\":" + String(bms.maxCellV, 3) + ",";
@@ -640,7 +635,7 @@ void handleHaJson() {
   json += "\"active_slave_id\":" + String(bms.activeSlaveId) + ",";
   json += "\"health_text\":\"" + healthText() + "\",";
   json += "\"operating_text\":\"" + operatingStateText() + "\",";
-  json += "\"cell_count\":15,";
+  json += "\"cell_count\":" + String(bms.cellCount ? bms.cellCount : 15) + ",";
   json += "\"pack_voltage_v\":" + String(bms.packV, 2) + ",";
   json += "\"current_a\":" + String(bms.current, 2) + ",";
   json += "\"soc_pct\":" + String(bms.soc) + ",";
@@ -655,8 +650,9 @@ void handleHaJson() {
   json += "\"cell_delta_v\":" + String(bms.cellDeltaV, 3) + ",";
   json += "\"warning_hex\":\"" + formatHex16(bms.warning) + "\",";
   json += "\"protect_hex\":\"" + formatHex16(bms.protect) + "\",";
-  json += "\"error_hex\":\"" + formatHex16(bms.errorCode) + "\",";
   json += "\"status_hex\":\"" + formatHex16(bms.status) + "\",";
+  json += "\"cycles\":" + String(bms.cycles) + ",";
+  json += "\"reserved_status\":" + String(bms.reservedStatus) + ",";
   for (int i = 0; i < 15; i++) {
     json += "\"cell_" + String(i + 1) + "_mv\":" + String(bms.cellsV[i]) + ",";
   }
