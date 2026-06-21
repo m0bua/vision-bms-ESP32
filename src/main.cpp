@@ -14,7 +14,8 @@
 constexpr uint8_t BMS_REG_COUNT = 0x24; // 0x0000..0x0023
 constexpr size_t BMS_RAW_REGS = BMS_REG_COUNT;
 
-struct BmsSnapshot {
+struct BmsSnapshot
+{
   bool online = false;
   int errorCount = 0;
   unsigned long lastUpdateMs = 0;
@@ -57,19 +58,26 @@ struct BmsSnapshot {
 BmsSnapshot bms;
 WebServer server(80);
 
-bool wifiConnected() {
+bool wifiConnected()
+{
   return WiFi.status() == WL_CONNECTED;
 }
 
-uint16_t getModbusCRC(const uint8_t* buf, size_t len) {
+uint16_t getModbusCRC(const uint8_t *buf, size_t len)
+{
   uint16_t crc = 0xFFFF;
-  for (size_t pos = 0; pos < len; pos++) {
+  for (size_t pos = 0; pos < len; pos++)
+  {
     crc ^= (uint16_t)buf[pos];
-    for (int i = 8; i != 0; i--) {
-      if ((crc & 0x0001) != 0) {
+    for (int i = 8; i != 0; i--)
+    {
+      if ((crc & 0x0001) != 0)
+      {
         crc >>= 1;
         crc ^= 0xA001;
-      } else {
+      }
+      else
+      {
         crc >>= 1;
       }
     }
@@ -77,18 +85,21 @@ uint16_t getModbusCRC(const uint8_t* buf, size_t len) {
   return crc;
 }
 
-static inline uint16_t readReg16(const uint8_t* frame, uint8_t regIndex) {
+static inline uint16_t readReg16(const uint8_t *frame, uint8_t regIndex)
+{
   size_t bytePos = 3 + (size_t)regIndex * 2;
   return ((uint16_t)frame[bytePos] << 8) | frame[bytePos + 1];
 }
 
-String formatHex16(uint16_t value) {
+String formatHex16(uint16_t value)
+{
   char buf[8];
   snprintf(buf, sizeof(buf), "0x%04X", value);
   return String(buf);
 }
 
-String formatUptime() {
+String formatUptime()
+{
   unsigned long sec = millis() / 1000UL;
   unsigned int days = sec / 86400UL;
   sec %= 86400UL;
@@ -98,7 +109,8 @@ String formatUptime() {
   unsigned int seconds = sec % 60UL;
 
   String out;
-  if (days > 0) {
+  if (days > 0)
+  {
     out += String(days) + "d ";
   }
   out += String(hours) + "h ";
@@ -107,50 +119,77 @@ String formatUptime() {
   return out;
 }
 
-String batteryStateText() {
+String batteryStateText()
+{
   return bms.online ? "ONLINE" : "OFFLINE";
 }
 
-String healthText() {
-  if (bms.warning != 0) {
+String healthText()
+{
+  if (bms.warning != 0)
+  {
     return "Warnings";
   }
-  if (bms.protect != 0) {
-    return "Protections";
+  if (bms.protect != 0)
+  {
+    return "Protected";
   }
   return "Normal";
 }
 
-String operatingStateText() {
-  if (!bms.online) {
+String operatingStateText()
+{
+  if (!bms.online)
+  {
     return "Offline";
   }
-  if ((bms.status & 0x1000) != 0) {
+  // Restore the original standby rule for near-full charge / idle state.
+  if (bms.warning == 2 && bms.protect == 4096 && bms.status == 0 && fabs(bms.current) < 0.5f && bms.soc >= 95)
+  {
     return "Standby";
   }
-  if (bms.warning != 0) {
+  if (bms.current > 0.05f)
+  {
+    return "Charging";
+  }
+  if (bms.current < -0.05f)
+  {
+    return "Discharging";
+  }
+  if (bms.protect != 0)
+  {
+    return "Protected";
+  }
+  if ((bms.status & 0x1000) != 0)
+  {
+    return "Standby";
+  }
+  if (bms.warning != 0)
+  {
     return "Warning";
   }
-  if (bms.protect != 0) {
-    return "Protect";
-  }
-  if (bms.status != 0) {
+  if (bms.status != 0)
+  {
     return "Active";
   }
   return "Normal";
 }
 
-String healthClass() {
-  if (bms.warning != 0) {
+String healthClass()
+{
+  if (bms.warning != 0)
+  {
     return "warn";
   }
-  if (bms.protect != 0) {
+  if (bms.protect != 0)
+  {
     return "warn";
   }
   return "soft";
 }
 
-void clearSnapshotData() {
+void clearSnapshotData()
+{
   bms.online = false;
   bms.rawCount = 0;
   bms.rawSlaveId = 0;
@@ -160,23 +199,29 @@ void clearSnapshotData() {
   bms.crcCalculated = 0;
 }
 
-void decodeSnapshot() {
+void decodeSnapshot()
+{
   bms.packV = bms.rawRegs[0] / 100.0f;
   bms.current = (int16_t)bms.rawRegs[1] / 100.0f;
 
   float minCell = 1000.0f;
   float maxCell = 0.0f;
   float sumCell = 0.0f;
-  for (int i = 0; i < 15; i++) {
+  for (int i = 0; i < 15; i++)
+  {
     bms.cellsV[i] = bms.rawRegs[2 + i];
     bms.cellVolts[i] = bms.cellsV[i] / 1000.0f;
-    if (bms.cellVolts[i] > 0.0f) {
-      if (bms.cellVolts[i] < minCell) minCell = bms.cellVolts[i];
-      if (bms.cellVolts[i] > maxCell) maxCell = bms.cellVolts[i];
+    if (bms.cellVolts[i] > 0.0f)
+    {
+      if (bms.cellVolts[i] < minCell)
+        minCell = bms.cellVolts[i];
+      if (bms.cellVolts[i] > maxCell)
+        maxCell = bms.cellVolts[i];
       sumCell += bms.cellVolts[i];
     }
   }
-  if (minCell == 1000.0f) minCell = 0.0f;
+  if (minCell == 1000.0f)
+    minCell = 0.0f;
   bms.minCellV = minCell;
   bms.maxCellV = maxCell;
   bms.avgCellV = sumCell / 15.0f;
@@ -188,9 +233,10 @@ void decodeSnapshot() {
   bms.maxChargeCurrentLimit = bms.rawRegs[0x16];
   bms.soh = bms.rawRegs[0x17];
   bms.soc = bms.rawRegs[0x18];
-  bms.warning = bms.rawRegs[0x19];
-  bms.protect = bms.rawRegs[0x1A];
-  bms.status = bms.rawRegs[0x1B];
+  // Raw samples match the original layout: 0x19=status, 0x1A=warning, 0x1B=protect.
+  bms.status = bms.rawRegs[0x19];
+  bms.warning = bms.rawRegs[0x1A];
+  bms.protect = bms.rawRegs[0x1B];
   bms.cycles = bms.rawRegs[0x1C];
   bms.reservedStatus = bms.rawRegs[0x1D];
   bms.cellCount = bms.rawRegs[0x1E];
@@ -201,10 +247,12 @@ void decodeSnapshot() {
   bms.tempPCB = bms.envTemp;
 }
 
-bool requestBmsData(uint8_t slaveId) {
+bool requestBmsData(uint8_t slaveId)
+{
   bms.lastTriedSlaveId = slaveId;
 
-  while (Serial2.available()) {
+  while (Serial2.available())
+  {
     Serial2.read();
   }
 
@@ -223,14 +271,17 @@ bool requestBmsData(uint8_t slaveId) {
   uint8_t res[80];
   int idx = 0;
   unsigned long start = millis();
-  while (millis() - start < 250 && idx < (int)sizeof(res)) {
-    if (Serial2.available()) {
+  while (millis() - start < 250 && idx < (int)sizeof(res))
+  {
+    if (Serial2.available())
+    {
       res[idx++] = Serial2.read();
     }
     delay(1);
   }
 
-  if (idx < 5) {
+  if (idx < 5)
+  {
     bms.errorCount++;
     clearSnapshotData();
     return false;
@@ -242,27 +293,31 @@ bool requestBmsData(uint8_t slaveId) {
   bms.crcReceived = ((uint16_t)res[idx - 1] << 8) | res[idx - 2];
   bms.crcCalculated = getModbusCRC(res, idx - 2);
 
-  if (bms.rawSlaveId != slaveId || bms.rawFunction != 0x03) {
+  if (bms.rawSlaveId != slaveId || bms.rawFunction != 0x03)
+  {
     bms.errorCount++;
     clearSnapshotData();
     return false;
   }
 
-  if (bms.crcReceived != bms.crcCalculated) {
+  if (bms.crcReceived != bms.crcCalculated)
+  {
     bms.errorCount++;
     clearSnapshotData();
     return false;
   }
 
   const int expectedBytes = 3 + (BMS_RAW_REGS * 2) + 2;
-  if (idx < expectedBytes) {
+  if (idx < expectedBytes)
+  {
     bms.errorCount++;
     clearSnapshotData();
     return false;
   }
 
   bms.rawCount = BMS_RAW_REGS;
-  for (uint8_t i = 0; i < BMS_RAW_REGS; i++) {
+  for (uint8_t i = 0; i < BMS_RAW_REGS; i++)
+  {
     bms.rawRegs[i] = readReg16(res, i);
   }
 
@@ -274,22 +329,27 @@ bool requestBmsData(uint8_t slaveId) {
   return true;
 }
 
-void sendCanFrame(uint32_t id, uint8_t len, uint8_t* data) {
-  if (!ENABLE_DEYE_CAN) {
+void sendCanFrame(uint32_t id, uint8_t len, uint8_t *data)
+{
+  if (!ENABLE_DEYE_CAN)
+  {
     return;
   }
   twai_message_t message = {};
   message.identifier = id;
   message.extd = 0;
   message.data_length_code = len;
-  for (int i = 0; i < len; i++) {
+  for (int i = 0; i < len; i++)
+  {
     message.data[i] = data[i];
   }
   twai_transmit(&message, pdMS_TO_TICKS(10));
 }
 
-void sendDeyeCanTelemetry() {
-  if (!ENABLE_DEYE_CAN || !bms.online) {
+void sendDeyeCanTelemetry()
+{
+  if (!ENABLE_DEYE_CAN || !bms.online)
+  {
     return;
   }
 
@@ -410,16 +470,14 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
           <div class="label">Cell summary</div>
           <div class="row" style="margin-top:10px">
             <div><span class="muted">Cell count:</span> <strong id="cellCount">-</strong></div>
+            <div><span class="muted">State:</span> <strong id="healthText">-</strong></div>
+            <div><span class="muted">Flags:</span> <strong id="flagText">-</strong></div>
           </div>
           <div class="row" style="margin-top:8px">
             <div><span class="muted">Min:</span> <strong id="cellMin">-</strong></div>
             <div><span class="muted">Avg:</span> <strong id="cellAvg">-</strong></div>
             <div><span class="muted">Max:</span> <strong id="cellMax">-</strong></div>
             <div><span class="muted">Delta:</span> <strong id="cellDelta">-</strong></div>
-          </div>
-          <div class="row" style="margin-top:10px">
-            <div><span class="muted">State:</span> <strong id="healthText">-</strong></div>
-            <div><span class="muted">Flags:</span> <strong id="flagText">-</strong></div>
           </div>
         </div>
       </div>
@@ -433,9 +491,9 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         <div class="row" style="justify-content:space-between">
           <div class="label">Links</div>
           <div class="row">
-            <a href="/diag">Diagnostic page</a>
-            <a href="/ha.json">HA JSON</a>
+            <a href="/ha">HA</a>
             <a href="/json">JSON</a>
+            <a href="/diag">Diagnostic</a>
           </div>
         </div>
       </div>
@@ -446,17 +504,79 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     const hex16 = (n) => '0x' + (n >>> 0).toString(16).toUpperCase().padStart(4, '0');
     const fmt = (v, d = 0) => Number(v).toFixed(d);
     const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-    const setText = (id, val) => { byId(id).textContent = val; };
+    const setText = (id, val) => {
+      const el = byId(id);
+      if (el) {
+        el.textContent = val;
+      }
+    };
 
     function badgeForOnline(online) {
       return online ? { text: 'ONLINE', cls: 'ok' } : { text: 'OFFLINE', cls: 'bad' };
     }
 
-    function renderCells(rawRegs, minMv, maxMv) {
+    function deriveOperatingText(data) {
+      if (!data.online) {
+        return 'Offline';
+      }
+      const currentA = Number(data.current_a || 0);
+      const soc = Number(data.soc || 0);
+      const warning = Number(data.warning || 0);
+      const protect = Number(data.protect || 0);
+      const status = Number(data.status || 0);
+
+      if (warning === 2 && protect === 4096 && status === 0 && Math.abs(currentA) < 0.5 && soc >= 95) {
+        return 'Standby';
+      }
+      if (currentA > 0.05) {
+        return 'Charging';
+      }
+      if (currentA < -0.05) {
+        return 'Discharging';
+      }
+      return data.operating_text || data.health_text || '-';
+    }
+
+    function extractCellMvList(data) {
+      const cells = [];
+      if (Array.isArray(data.cells) && data.cells.length) {
+        data.cells.forEach((cell) => {
+          if (typeof cell === 'number') {
+            cells.push(Number(cell || 0));
+            return;
+          }
+          if (cell && typeof cell === 'object') {
+            if (cell.mv != null) {
+              cells.push(Number(cell.mv || 0));
+              return;
+            }
+            if (cell.v != null) {
+              cells.push(Number(cell.v || 0) * 1000);
+              return;
+            }
+          }
+          cells.push(0);
+        });
+      } else if (Array.isArray(data.cell_voltages_mv) && data.cell_voltages_mv.length) {
+        data.cell_voltages_mv.forEach((mv) => cells.push(Number(mv || 0)));
+      } else if (Array.isArray(data.raw_regs) && data.raw_regs.length >= 17) {
+        data.raw_regs.slice(2, 17).forEach((reg) => cells.push(Number(reg || 0)));
+      } else {
+        for (let i = 1; i <= 15; i++) {
+          const key = 'cell_' + i + '_mv';
+          if (data[key] != null) {
+            cells.push(Number(data[key] || 0));
+          }
+        }
+      }
+      return cells;
+    }
+
+    function renderCells(data, minMv, maxMv) {
       const grid = byId('cellGrid');
       grid.innerHTML = '';
-      rawRegs.slice(2, 17).forEach((reg, i) => {
-        const mv = Number(reg || 0);
+      const mvList = extractCellMvList(data);
+      mvList.forEach((mv, i) => {
         const v = (mv / 1000).toFixed(3);
         const el = document.createElement('div');
         el.className = 'cell';
@@ -499,19 +619,21 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         setText('cellAvg', fmt(data.cell_avg_v || 0, 3) + ' V');
         setText('cellMax', fmt(data.cell_max_v || 0, 3) + ' V');
         setText('cellDelta', fmt(data.cell_delta_v || 0, 3) + ' V');
-        setText('healthText', data.operating_text || data.health_text || '-');
+        setText('healthText', deriveOperatingText(data));
         setText('flagText', 'S: ' + String(data.status ?? 0) +
           '  W: ' + String(data.warning ?? 0) +
           '  P: ' + String(data.protect ?? 0) +
           '  C: ' + String(data.cycles ?? 0));
-        setText('cellCount', String(data.cell_count ?? '-'));
+        const mvList = extractCellMvList(data);
+        const cellCount = Number(data.cell_count || mvList.length || 0);
+        setText('cellCount', cellCount > 0 ? String(cellCount) : '-');
 
         const soc = clamp(Number(data.soc || 0), 0, 100);
         byId('socBar').style.width = soc + '%';
         byId('socBar').className = 'fill ' + (soc < 20 ? 'low' : soc < 80 ? 'mid' : 'high');
         setText('socText', soc + '%');
 
-        renderCells(data.raw_regs || [], Math.round((data.cell_min_v || 0) * 1000), Math.round((data.cell_max_v || 0) * 1000));
+        renderCells(data, Math.round((data.cell_min_v || 0) * 1000), Math.round((data.cell_max_v || 0) * 1000));
       } catch (e) {
         setText('pollState', 'offline');
         byId('pollState').className = 'pill offline';
@@ -524,11 +646,13 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
-void handleRoot() {
+void handleRoot()
+{
   server.send_P(200, "text/html", INDEX_HTML);
 }
 
-void handleDiag() {
+void handleDiag()
+{
   String html = "<html><head><meta charset='utf-8'><meta http-equiv='refresh' content='5'>";
   html += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
   html += "<style>";
@@ -546,19 +670,14 @@ void handleDiag() {
   html += "<div>Status: " + String(bms.online ? "ONLINE" : "OFFLINE") + " | Errors: " + String(bms.errorCount) + "</div>";
   html += "<div>Operating state: " + operatingStateText() + "</div>";
   html += "<div>Health: <span class='" + healthClass() + "'>" + healthText() + "</span></div>";
-  html += "<div>Flags: <span class='soft'>S:</span> " + String(bms.status) +
-          " | <span class='soft'>W:</span> " + String(bms.warning) +
-          " | <span class='soft'>P:</span> " + String(bms.protect) +
-          " | <span class='soft'>C:</span> " + String(bms.cycles) +
-          " | <span class='soft'>R:</span> " + formatHex16(bms.reservedStatus) +
-          "</div>";
   html += "<div>Cell count: " + String(bms.cellCount ? bms.cellCount : 15) + "</div>";
   html += "<div>CRC rx: " + formatHex16(bms.crcReceived) + " | CRC calc: " + formatHex16(bms.crcCalculated) + "</div>";
   html += "<div><a href='/'>Back to dashboard</a></div>";
   html += "</div>";
 
   html += "<div class='card'><h2>Raw registers</h2><div class='grid'>";
-  for (uint8_t i = 0; i < bms.rawCount; i++) {
+  for (uint8_t i = 0; i < bms.rawCount; i++)
+  {
     html += "<div class='cell'><div class='muted'>Reg 0x";
     char idxBuf[8];
     snprintf(idxBuf, sizeof(idxBuf), "%04X", i);
@@ -574,7 +693,8 @@ void handleDiag() {
   server.send(200, "text/html", html);
 }
 
-void handleJson() {
+void handleJson()
+{
   String json = "{";
   json += "\"wifi\":{";
   json += "\"connected\":" + String(wifiConnected() ? "true" : "false") + ",";
@@ -614,9 +734,22 @@ void handleJson() {
   json += "\"cell_temp_1\":" + String(bms.cellTempBytes[0]) + ",";
   json += "\"cell_temp_2\":" + String(bms.cellTempBytes[1]) + ",";
   json += "\"cell_temp_3\":" + String(bms.cellTempBytes[2]) + ",";
-  json += "\"cells\":[";
   for (int i = 0; i < 15; i++) {
-    if (i > 0) json += ",";
+    json += "\"cell_" + String(i + 1) + "_mv\":" + String(bms.cellsV[i]) + ",";
+  }
+  json += "\"cell_voltages_mv\":[";
+  for (int i = 0; i < 15; i++) {
+    if (i > 0) {
+      json += ",";
+    }
+    json += String(bms.cellsV[i]);
+  }
+  json += "],";
+  json += "\"cells\":[";
+  for (int i = 0; i < 15; i++)
+  {
+    if (i > 0)
+      json += ",";
     json += "{";
     json += "\"index\":" + String(i + 1) + ",";
     json += "\"mv\":" + String(bms.cellsV[i]) + ",";
@@ -625,15 +758,18 @@ void handleJson() {
   }
   json += "],";
   json += "\"raw_regs\":[";
-  for (uint8_t i = 0; i < bms.rawCount; i++) {
-    if (i > 0) json += ",";
+  for (uint8_t i = 0; i < bms.rawCount; i++)
+  {
+    if (i > 0)
+      json += ",";
     json += String(bms.rawRegs[i]);
   }
   json += "]}";
   server.send(200, "application/json", json);
 }
 
-void handleHaJson() {
+void handleHaJson()
+{
   String json = "{";
   json += "\"online\":" + String(bms.online ? "true" : "false") + ",";
   json += "\"active_slave_id\":" + String(bms.activeSlaveId) + ",";
@@ -657,29 +793,35 @@ void handleHaJson() {
   json += "\"status_hex\":\"" + formatHex16(bms.status) + "\",";
   json += "\"cycles\":" + String(bms.cycles) + ",";
   json += "\"reserved_status\":" + String(bms.reservedStatus) + ",";
-  for (int i = 0; i < 15; i++) {
+  for (int i = 0; i < 15; i++)
+  {
     json += "\"cell_" + String(i + 1) + "_mv\":" + String(bms.cellsV[i]) + ",";
   }
   json += "\"cell_voltages_mv\":[";
-  for (int i = 0; i < 15; i++) {
-    if (i > 0) json += ",";
+  for (int i = 0; i < 15; i++)
+  {
+    if (i > 0)
+      json += ",";
     json += String(bms.cellsV[i]);
   }
   json += "]}";
   server.send(200, "application/json", json);
 }
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
   Serial2.begin(9600, SERIAL_8N1, BMS_RX_PIN, BMS_TX_PIN);
   pinMode(BMS_DE_PIN, OUTPUT);
   digitalWrite(BMS_DE_PIN, LOW);
 
-  if (ENABLE_DEYE_CAN) {
+  if (ENABLE_DEYE_CAN)
+  {
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT((gpio_num_t)CAN_TX_PIN, (gpio_num_t)CAN_RX_PIN, TWAI_MODE_NORMAL);
     twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-    if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK) {
+    if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK)
+    {
       twai_start();
     }
   }
@@ -690,27 +832,32 @@ void setup() {
   server.on("/", handleRoot);
   server.on("/diag", handleDiag);
   server.on("/json", handleJson);
-  server.on("/ha.json", handleHaJson);
+  server.on("/ha", handleHaJson);
   server.begin();
 }
 
-void loop() {
+void loop()
+{
   static unsigned long lastPoll = 0;
   static unsigned long lastLog = 0;
   static uint8_t scanId = PREFERRED_BMS_ID;
 
-  if (millis() - lastPoll >= 3000) {
+  if (millis() - lastPoll >= 3000)
+  {
     bool ok = requestBmsData(bms.online ? bms.activeSlaveId : scanId);
-    if (!ok && !bms.online) {
+    if (!ok && !bms.online)
+    {
       scanId++;
-      if (scanId > BMS_ID_MAX) {
+      if (scanId > BMS_ID_MAX)
+      {
         scanId = BMS_ID_MIN;
       }
     }
     lastPoll = millis();
   }
 
-  if (millis() - lastLog >= 3000) {
+  if (millis() - lastLog >= 3000)
+  {
     lastLog = millis();
     Serial.print("BMS ");
     Serial.print(bms.online ? "ONLINE" : "OFFLINE");
@@ -726,7 +873,8 @@ void loop() {
     Serial.println(formatHex16(bms.crcCalculated));
   }
 
-  if (ENABLE_DEYE_CAN && bms.online) {
+  if (ENABLE_DEYE_CAN && bms.online)
+  {
     sendDeyeCanTelemetry();
   }
 
