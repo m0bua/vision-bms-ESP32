@@ -408,13 +408,16 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         </div>
         <div style="margin-top:12px">
           <div class="label">Cell summary</div>
+          <div class="row" style="margin-top:10px">
+            <div><span class="muted">Cell count:</span> <strong id="cellCount">-</strong></div>
+          </div>
           <div class="row" style="margin-top:8px">
             <div><span class="muted">Min:</span> <strong id="cellMin">-</strong></div>
             <div><span class="muted">Avg:</span> <strong id="cellAvg">-</strong></div>
             <div><span class="muted">Max:</span> <strong id="cellMax">-</strong></div>
             <div><span class="muted">Delta:</span> <strong id="cellDelta">-</strong></div>
           </div>
-        <div class="row" style="margin-top:10px">
+          <div class="row" style="margin-top:10px">
             <div><span class="muted">State:</span> <strong id="healthText">-</strong></div>
             <div><span class="muted">Flags:</span> <strong id="flagText">-</strong></div>
           </div>
@@ -497,11 +500,11 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         setText('cellMax', fmt(data.cell_max_v || 0, 3) + ' V');
         setText('cellDelta', fmt(data.cell_delta_v || 0, 3) + ' V');
         setText('healthText', data.operating_text || data.health_text || '-');
-        setText('flagText', 'W ' + hex16(data.warning || 0) +
-          '  P ' + hex16(data.protect || 0) +
-          '  S ' + hex16(data.status || 0) +
-          '  C ' + String(data.cycles ?? '-') +
-          '  N ' + String(data.cell_count ?? '-'));
+        setText('flagText', 'S: ' + String(data.status ?? 0) +
+          '  W: ' + String(data.warning ?? 0) +
+          '  P: ' + String(data.protect ?? 0) +
+          '  C: ' + String(data.cycles ?? 0));
+        setText('cellCount', String(data.cell_count ?? '-'));
 
         const soc = clamp(Number(data.soc || 0), 0, 100);
         byId('socBar').style.width = soc + '%';
@@ -543,12 +546,13 @@ void handleDiag() {
   html += "<div>Status: " + String(bms.online ? "ONLINE" : "OFFLINE") + " | Errors: " + String(bms.errorCount) + "</div>";
   html += "<div>Operating state: " + operatingStateText() + "</div>";
   html += "<div>Health: <span class='" + healthClass() + "'>" + healthText() + "</span></div>";
-  html += "<div>Flags: <span class='soft'>W</span> " + formatHex16(bms.warning) +
-          " | <span class='soft'>P</span> " + formatHex16(bms.protect) +
-          " | <span class='soft'>S</span> " + formatHex16(bms.status) +
-          " | <span class='soft'>C</span> " + formatHex16(bms.cycles) +
-          " | <span class='soft'>R</span> " + formatHex16(bms.reservedStatus) +
-          " | <span class='soft'>N</span> " + formatHex16(bms.cellCount) + "</div>";
+  html += "<div>Flags: <span class='soft'>S:</span> " + String(bms.status) +
+          " | <span class='soft'>W:</span> " + String(bms.warning) +
+          " | <span class='soft'>P:</span> " + String(bms.protect) +
+          " | <span class='soft'>C:</span> " + String(bms.cycles) +
+          " | <span class='soft'>R:</span> " + formatHex16(bms.reservedStatus) +
+          "</div>";
+  html += "<div>Cell count: " + String(bms.cellCount ? bms.cellCount : 15) + "</div>";
   html += "<div>CRC rx: " + formatHex16(bms.crcReceived) + " | CRC calc: " + formatHex16(bms.crcCalculated) + "</div>";
   html += "<div><a href='/'>Back to dashboard</a></div>";
   html += "</div>";
