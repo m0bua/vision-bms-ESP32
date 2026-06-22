@@ -397,7 +397,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
     .card{grid-column:span 12;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
     .half{grid-column:span 6}
-    .stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+    .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
     .stat{padding:14px;border-radius:14px;background:var(--panel2);border:1px solid var(--line)}
     #crc{font-size:.7em}
     .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
@@ -428,7 +428,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     <div class="hero">
       <div>
         <h1>BMS Dashboard</h1>
-        <div class="sub">Static UI reading <code>/json</code> every 2 seconds</div>
+        <div class="sub">Vision V-LFP48100</div>
       </div>
       <div class="pill" id="pollState">loading</div>
     </div>
@@ -438,9 +438,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         <div class="stats">
           <div class="stat"><div class="label">Wi-Fi</div><div class="value" id="wifiState">-</div><div class="muted" id="wifiIp">-</div></div>
           <div class="stat"><div class="label">Uptime</div><div class="value" id="uptime">-</div><div class="muted" id="lastUpdate">-</div></div>
-          <div class="stat"><div class="label">BMS ID</div><div class="value" id="slaveId">-</div><div class="muted" id="scanId">-</div></div>
           <div class="stat"><div class="label">Errors</div><div class="value" id="errors">-</div><div class="muted" id="crc">-</div></div>
-          <div class="stat"><div class="label">Mode</div><div class="value" id="mode">-</div><div class="muted" id="canEnabled">-</div></div>
         </div>
       </div>
 
@@ -465,6 +463,10 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
           <div><span class="muted">Env temp:</span> <strong id="envTemp">-</strong></div>
           <div><span class="muted">Max cell temp:</span> <strong id="maxCellTemp">-</strong></div>
           <div><span class="muted">Remaining Ah:</span> <strong id="remainingAh">-</strong></div>
+        </div>
+        <div class="row">
+          <div><span class="muted">BMS ID:</span> <strong id="slaveId">-</strong></div>
+          <div><span class="muted">last tried:</span> <strong id="scanId">-</strong></div>
         </div>
         <div style="margin-top:12px">
           <div class="label">Cell summary</div>
@@ -506,9 +508,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
     const setText = (id, val) => {
       const el = byId(id);
-      if (el) {
-        el.textContent = val;
-      }
+      if (el) el.textContent = val;
     };
 
     function badgeForOnline(online) {
@@ -516,9 +516,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     }
 
     function deriveOperatingText(data) {
-      if (!data.online) {
-        return 'Offline';
-      }
+      if (!data.online) return 'Offline';
       const currentA = Number(data.current_a || 0);
       const soc = Number(data.soc || 0);
       const warning = Number(data.warning || 0);
@@ -528,12 +526,8 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       if (warning === 2 && protect === 4096 && status === 0 && Math.abs(currentA) < 0.5 && soc >= 95) {
         return 'Standby';
       }
-      if (currentA > 0.05) {
-        return 'Charging';
-      }
-      if (currentA < -0.05) {
-        return 'Discharging';
-      }
+      if (currentA > 0.05) return 'Charging';
+      if (currentA < -0.05) return 'Discharging';
       return data.operating_text || data.health_text || '-';
     }
 
@@ -564,9 +558,8 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       } else {
         for (let i = 1; i <= 15; i++) {
           const key = 'cell_' + i + '_mv';
-          if (data[key] != null) {
+          if (data[key] != null)
             cells.push(Number(data[key] || 0));
-          }
         }
       }
       return cells;
