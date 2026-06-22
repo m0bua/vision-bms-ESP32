@@ -37,14 +37,12 @@ struct BmsSnapshot
   uint16_t cycles = 0;
   uint16_t reservedStatus = 0;
   uint16_t cellCount = 0;
-  uint16_t cellTempBytes[3] = {0, 0, 0};
   uint16_t cellsV[15] = {0};
   float cellVolts[15] = {0.0f};
   float minCellV = 0.0f;
   float maxCellV = 0.0f;
   float avgCellV = 0.0f;
   float cellDeltaV = 0.0f;
-  uint32_t fullChargeCapacity = 0;
 
   uint16_t rawRegs[BMS_RAW_REGS] = {0};
   uint8_t rawCount = 0;
@@ -96,6 +94,96 @@ String formatHex16(uint16_t value)
   char buf[8];
   snprintf(buf, sizeof(buf), "0x%04X", value);
   return String(buf);
+}
+
+struct FlagName
+{
+  uint16_t bit;
+  const char *name;
+};
+
+const FlagName STATUS_FLAGS[] = {
+    {0x0001, "Discharge FET"},
+    {0x0002, "Charge FET"},
+    {0x1000, "Standby / extra bit"},
+};
+
+const FlagName WARNING_FLAGS[] = {
+    {0x0001, "Cell overvoltage"},
+    {0x0002, "Cell undervoltage"},
+    {0x0004, "Pack overvoltage"},
+    {0x0008, "Pack undervoltage"},
+    {0x0010, "Charge overtemperature"},
+    {0x0020, "Charge undertemperature"},
+    {0x0040, "Discharge overtemperature"},
+    {0x0080, "Discharge undertemperature"},
+    {0x0100, "Charge overcurrent"},
+    {0x0200, "Discharge overcurrent"},
+    {0x0400, "Short circuit"},
+    {0x0800, "IC front-end error"},
+    {0x1000, "Mosfet software lock"},
+};
+
+const FlagName PROTECT_FLAGS[] = {
+    {0x0001, "Single overvoltage"},
+    {0x0002, "Single undervoltage"},
+    {0x0004, "Whole group overvoltage"},
+    {0x0008, "Whole group undervoltage"},
+    {0x0010, "Charge overtemperature"},
+    {0x0020, "Charge undertemperature"},
+    {0x0040, "Discharge overtemperature"},
+    {0x0080, "Discharge undertemperature"},
+    {0x0100, "Charge overcurrent"},
+    {0x0200, "Discharge overcurrent"},
+    {0x0400, "Short circuit"},
+    {0x0800, "IC front-end error"},
+    {0x1000, "Software lock MOS"},
+};
+
+String decodeBitmask(uint16_t mask, const FlagName *flags, size_t flagCount)
+{
+  String out;
+  for (size_t i = 0; i < flagCount; i++)
+  {
+    if ((mask & flags[i].bit) == 0)
+      continue;
+    if (!out.isEmpty())
+      out += ", ";
+    out += flags[i].name;
+  }
+  if (out.isEmpty())
+    out = "none";
+  return out;
+}
+
+String activeFlagChips(uint16_t mask, const FlagName *flags, size_t flagCount, const char *chipClass)
+{
+  String out;
+  bool hasAny = false;
+  for (size_t i = 0; i < flagCount; i++)
+  {
+    if ((mask & flags[i].bit) == 0)
+      continue;
+    if (!hasAny)
+    {
+      out += "<div class='flag-group'><div class='flag-title'>Active bits</div>";
+      hasAny = true;
+    }
+    out += "<span class='tag ";
+    out += chipClass;
+    out += "'>";
+    out += flags[i].name;
+    out += "</span>";
+  }
+  if (!hasAny)
+  {
+    out = "<div class='flag-group'><div class='flag-title'>Active bits</div><span class='tag tag-muted'>none</span></div>";
+  }
+  else
+  {
+    out += "</div>";
+  }
+  return out;
 }
 
 const char *rawRegisterName(uint8_t index)
@@ -161,15 +249,15 @@ const char *rawRegisterName(uint8_t index)
   case 0x1E:
     return "cell count";
   case 0x1F:
-    return "full charge cap hi";
+    return "aux cfg 1";
   case 0x20:
-    return "full charge cap lo";
+    return "aux cfg 2";
   case 0x21:
-    return "cell temp 1";
+    return "aux cfg 3";
   case 0x22:
-    return "cell temp 2";
+    return "aux cfg 4";
   case 0x23:
-    return "cell temp 3";
+    return "aux cfg 5";
   default:
     return "reserved";
   }
@@ -205,11 +293,11 @@ String healthText()
 {
   if (bms.warning != 0)
   {
-    return "Warnings";
+    return "Warnings: " + decodeBitmask(bms.warning, WARNING_FLAGS, sizeof(WARNING_FLAGS) / sizeof(WARNING_FLAGS[0]));
   }
   if (bms.protect != 0)
   {
-    return "Protected";
+    return "Protected: " + decodeBitmask(bms.protect, PROTECT_FLAGS, sizeof(PROTECT_FLAGS) / sizeof(PROTECT_FLAGS[0]));
   }
   return "Normal";
 }
@@ -220,26 +308,27 @@ String operatingStateText()
   {
     return "Offline";
   }
-  // Restore the original standby rule for near-full charge / idle state.
-  if (bms.warning == 2 && bms.protect == 4096 && bms.status == 0 && fabs(bms.current) < 0.5f && bms.soc >= 95)
+  const bool dischargeEnabled = (bms.status & 0x0001) != 0;
+  const bool chargeEnabled = (bms.status & 0x0002) != 0;
+  if (dischargeEnabled && chargeEnabled)
   {
-    return "Standby";
+    return "Charging + Discharging";
   }
-  if (bms.current > 0.05f)
+  if (chargeEnabled)
   {
     return "Charging";
   }
-  if (bms.current < -0.05f)
+  if (dischargeEnabled)
   {
     return "Discharging";
+  }
+  if ((bms.status & 0x1000) != 0 || (bms.warning == 2 && bms.protect == 4096 && fabs(bms.current) < 0.5f && bms.soc >= 95))
+  {
+    return "Standby";
   }
   if (bms.protect != 0)
   {
     return "Protected";
-  }
-  if ((bms.status & 0x1000) != 0)
-  {
-    return "Standby";
   }
   if (bms.warning != 0)
   {
@@ -263,6 +352,21 @@ String healthClass()
     return "warn";
   }
   return "soft";
+}
+
+String statusFlagsText()
+{
+  return decodeBitmask(bms.status, STATUS_FLAGS, sizeof(STATUS_FLAGS) / sizeof(STATUS_FLAGS[0]));
+}
+
+String warningFlagsText()
+{
+  return decodeBitmask(bms.warning, WARNING_FLAGS, sizeof(WARNING_FLAGS) / sizeof(WARNING_FLAGS[0]));
+}
+
+String protectFlagsText()
+{
+  return decodeBitmask(bms.protect, PROTECT_FLAGS, sizeof(PROTECT_FLAGS) / sizeof(PROTECT_FLAGS[0]));
 }
 
 void clearSnapshotData()
@@ -317,10 +421,7 @@ void decodeSnapshot()
   bms.cycles = bms.rawRegs[0x1C];
   bms.reservedStatus = bms.rawRegs[0x1D];
   bms.cellCount = bms.rawRegs[0x1E];
-  bms.fullChargeCapacity = ((uint32_t)bms.rawRegs[0x1F] << 16) | bms.rawRegs[0x20];
-  bms.cellTempBytes[0] = bms.rawRegs[0x21];
-  bms.cellTempBytes[1] = bms.rawRegs[0x22];
-  bms.cellTempBytes[2] = bms.rawRegs[0x23];
+  // 0x1F..0x23 do not map cleanly to direct voltages; keep them as auxiliary/config fields.
   bms.tempPCB = bms.envTemp;
 }
 
@@ -725,6 +826,13 @@ void handleDiag()
   html += ".card{max-width:1200px;margin:0 auto 16px auto;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--panel);}";
   html += ".grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}";
   html += ".cell{padding:10px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);}";
+  html += ".flag-group{margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#151515;}";
+  html += ".flag-title{color:var(--muted);font-size:11px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;}";
+  html += ".tag{display:inline-block;margin:0 6px 6px 0;padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid transparent;}";
+  html += ".tag-muted{background:#202020;color:var(--muted);border-color:var(--line);}";
+  html += ".tag-status{background:#1f2b3f;color:#dbe8ff;border-color:#35537a;}";
+  html += ".tag-warn{background:#3d3415;color:#fff2ba;border-color:#7f6a20;}";
+  html += ".tag-protect{background:#3c1818;color:#ffd0d0;border-color:#7f2e2e;}";
   html += ".muted{color:var(--muted);font-size:12px;}";
   html += ".soft{color:var(--muted);}";
   html += ".ok{color:var(--ok);}.warn{color:var(--warn);}.bad{color:var(--bad);}";
@@ -735,13 +843,23 @@ void handleDiag()
   html += "<div>Status: " + String(bms.online ? "ONLINE" : "OFFLINE") + " | Errors: " + String(bms.errorCount) + "</div>";
   html += "<div>Operating state: " + operatingStateText() + "</div>";
   html += "<div>Health: <span class='" + healthClass() + "'>" + healthText() + "</span></div>";
-  html += "<div>Flags: Status " + formatHex16(bms.status) + " | Warning " + formatHex16(bms.warning) + " | Protect " + formatHex16(bms.protect) + " | Cycles " + String(bms.cycles) + "</div>";
+  html += "<div>Status: " + formatHex16(bms.status) + " <span class='muted'>(" + statusFlagsText() + ")</span>";
+  html += activeFlagChips(bms.status, STATUS_FLAGS, sizeof(STATUS_FLAGS) / sizeof(STATUS_FLAGS[0]), "tag-status");
+  html += "</div>";
+  html += "<div>Warning: " + formatHex16(bms.warning) + " <span class='muted'>(" + warningFlagsText() + ")</span>";
+  html += activeFlagChips(bms.warning, WARNING_FLAGS, sizeof(WARNING_FLAGS) / sizeof(WARNING_FLAGS[0]), "tag-warn");
+  html += "</div>";
+  html += "<div>Protect: " + formatHex16(bms.protect) + " <span class='muted'>(" + protectFlagsText() + ")</span>";
+  html += activeFlagChips(bms.protect, PROTECT_FLAGS, sizeof(PROTECT_FLAGS) / sizeof(PROTECT_FLAGS[0]), "tag-protect");
+  html += "</div>";
+  html += "<div>Cycles: " + String(bms.cycles) + "</div>";
   html += "<div>Cell count: " + String(bms.cellCount ? bms.cellCount : 15) + "</div>";
   html += "<div>CRC rx: " + formatHex16(bms.crcReceived) + " | CRC calc: " + formatHex16(bms.crcCalculated) + "</div>";
   html += "<div><a href='/'>Back to dashboard</a></div>";
   html += "</div>";
 
   html += "<div class='card'><h2>Raw registers</h2><div class='grid'>";
+  html += "<div class='muted' style='margin-bottom:10px'>0x1F..0x23 look like auxiliary/config fields on this pack, not temperatures.</div>";
   for (uint8_t i = 0; i < bms.rawCount; i++)
   {
     html += "<div class='cell'><div class='muted'>Field</div><div><strong>";
@@ -778,6 +896,9 @@ void handleJson()
   json += "\"mode_label\":\"" + String(ENABLE_DEYE_CAN ? "BMS + Deye CAN" : "BMS read only") + "\",";
   json += "\"health_text\":\"" + healthText() + "\",";
   json += "\"operating_text\":\"" + operatingStateText() + "\",";
+  json += "\"status_flags\":\"" + statusFlagsText() + "\",";
+  json += "\"warning_flags\":\"" + warningFlagsText() + "\",";
+  json += "\"protect_flags\":\"" + protectFlagsText() + "\",";
   json += "\"last_update_ms\":" + String(bms.lastUpdateMs) + ",";
   json += "\"crc_received\":" + String(bms.crcReceived) + ",";
   json += "\"crc_calculated\":" + String(bms.crcCalculated) + ",";
@@ -799,9 +920,6 @@ void handleJson()
   json += "\"cell_avg_v\":" + String(bms.avgCellV, 3) + ",";
   json += "\"cell_max_v\":" + String(bms.maxCellV, 3) + ",";
   json += "\"cell_delta_v\":" + String(bms.cellDeltaV, 3) + ",";
-  json += "\"cell_temp_1\":" + String(bms.cellTempBytes[0]) + ",";
-  json += "\"cell_temp_2\":" + String(bms.cellTempBytes[1]) + ",";
-  json += "\"cell_temp_3\":" + String(bms.cellTempBytes[2]) + ",";
   for (int i = 0; i < 15; i++) {
     json += "\"cell_" + String(i + 1) + "_mv\":" + String(bms.cellsV[i]) + ",";
   }
@@ -843,6 +961,9 @@ void handleHaJson()
   json += "\"active_slave_id\":" + String(bms.activeSlaveId) + ",";
   json += "\"health_text\":\"" + healthText() + "\",";
   json += "\"operating_text\":\"" + operatingStateText() + "\",";
+  json += "\"status_flags\":\"" + statusFlagsText() + "\",";
+  json += "\"warning_flags\":\"" + warningFlagsText() + "\",";
+  json += "\"protect_flags\":\"" + protectFlagsText() + "\",";
   json += "\"cell_count\":" + String(bms.cellCount ? bms.cellCount : 15) + ",";
   json += "\"pack_voltage_v\":" + String(bms.packV, 2) + ",";
   json += "\"current_a\":" + String(bms.current, 2) + ",";
