@@ -55,6 +55,8 @@ struct BmsSnapshot
 
 BmsSnapshot bms;
 WebServer server(80);
+extern const char INDEX_HTML[] PROGMEM;
+extern const char DIAG_HTML[] PROGMEM;
 
 bool wifiConnected()
 {
@@ -94,6 +96,83 @@ String formatHex16(uint16_t value)
   char buf[8];
   snprintf(buf, sizeof(buf), "0x%04X", value);
   return String(buf);
+}
+
+const char *rawRegisterName(uint8_t index)
+{
+  switch (index)
+  {
+  case 0x00:
+    return "pack voltage";
+  case 0x01:
+    return "current";
+  case 0x02:
+    return "cell 1";
+  case 0x03:
+    return "cell 2";
+  case 0x04:
+    return "cell 3";
+  case 0x05:
+    return "cell 4";
+  case 0x06:
+    return "cell 5";
+  case 0x07:
+    return "cell 6";
+  case 0x08:
+    return "cell 7";
+  case 0x09:
+    return "cell 8";
+  case 0x0A:
+    return "cell 9";
+  case 0x0B:
+    return "cell 10";
+  case 0x0C:
+    return "cell 11";
+  case 0x0D:
+    return "cell 12";
+  case 0x0E:
+    return "cell 13";
+  case 0x0F:
+    return "cell 14";
+  case 0x10:
+    return "cell 15";
+  case 0x13:
+    return "env temp";
+  case 0x14:
+    return "max cell temp";
+  case 0x15:
+    return "remaining Ah";
+  case 0x16:
+    return "max charge current";
+  case 0x17:
+    return "SOH";
+  case 0x18:
+    return "SOC";
+  case 0x19:
+    return "status";
+  case 0x1A:
+    return "warning";
+  case 0x1B:
+    return "protect";
+  case 0x1C:
+    return "cycles";
+  case 0x1D:
+    return "reserved status";
+  case 0x1E:
+    return "cell count";
+  case 0x1F:
+    return "aux cfg 1";
+  case 0x20:
+    return "aux cfg 2";
+  case 0x21:
+    return "aux cfg 3";
+  case 0x22:
+    return "aux cfg 4";
+  case 0x23:
+    return "aux cfg 5";
+  default:
+    return "reserved";
+  }
 }
 
 struct FlagName
@@ -184,83 +263,6 @@ String activeFlagChips(uint16_t mask, const FlagName *flags, size_t flagCount, c
     out += "</div>";
   }
   return out;
-}
-
-const char *rawRegisterName(uint8_t index)
-{
-  switch (index)
-  {
-  case 0x00:
-    return "pack voltage";
-  case 0x01:
-    return "current";
-  case 0x02:
-    return "cell 1";
-  case 0x03:
-    return "cell 2";
-  case 0x04:
-    return "cell 3";
-  case 0x05:
-    return "cell 4";
-  case 0x06:
-    return "cell 5";
-  case 0x07:
-    return "cell 6";
-  case 0x08:
-    return "cell 7";
-  case 0x09:
-    return "cell 8";
-  case 0x0A:
-    return "cell 9";
-  case 0x0B:
-    return "cell 10";
-  case 0x0C:
-    return "cell 11";
-  case 0x0D:
-    return "cell 12";
-  case 0x0E:
-    return "cell 13";
-  case 0x0F:
-    return "cell 14";
-  case 0x10:
-    return "cell 15";
-  case 0x13:
-    return "env temp";
-  case 0x14:
-    return "max cell temp";
-  case 0x15:
-    return "remaining Ah";
-  case 0x16:
-    return "max charge current";
-  case 0x17:
-    return "SOH";
-  case 0x18:
-    return "SOC";
-  case 0x19:
-    return "status";
-  case 0x1A:
-    return "warning";
-  case 0x1B:
-    return "protect";
-  case 0x1C:
-    return "cycles";
-  case 0x1D:
-    return "reserved status";
-  case 0x1E:
-    return "cell count";
-  case 0x1F:
-    return "aux cfg 1";
-  case 0x20:
-    return "aux cfg 2";
-  case 0x21:
-    return "aux cfg 3";
-  case 0x22:
-    return "aux cfg 4";
-  case 0x23:
-    return "aux cfg 5";
-  default:
-    return "reserved";
-  }
 }
 
 String formatUptime()
@@ -385,6 +387,30 @@ String haSubstatusText()
   if (bms.warning != 0)
     return warningFlagsText();
   return statusFlagsText();
+}
+
+String buildDiagRawRegistersHtml()
+{
+  String html;
+  html.reserve(64 + bms.rawCount * 140);
+  html += "<div class='card'><h2>Raw registers</h2><div class='grid'>";
+  html += "<div class='muted' style='margin-bottom:10px'>0x1F..0x23 look like auxiliary/config fields on this pack, not temperatures.</div>";
+  for (uint8_t i = 0; i < bms.rawCount; i++)
+  {
+    html += "<div class='cell'><div class='muted'>Field</div><div><strong>";
+    html += rawRegisterName(i);
+    html += "</strong></div><div class='muted'>Reg 0x";
+    char idxBuf[8];
+    snprintf(idxBuf, sizeof(idxBuf), "%04X", i);
+    html += idxBuf;
+    html += "</div><div><strong>";
+    html += formatHex16(bms.rawRegs[i]);
+    html += "</strong></div><div class='muted'>";
+    html += String(bms.rawRegs[i]);
+    html += "</div></div>";
+  }
+  html += "</div></div>";
+  return html;
 }
 
 void clearSnapshotData()
@@ -573,6 +599,235 @@ void sendDeyeCanTelemetry()
   sendCanFrame(0x35F, 8, d35F);
 }
 
+void handleRoot()
+{
+  server.send_P(200, "text/html", INDEX_HTML);
+}
+
+String buildDiagHtml()
+{
+  String html = FPSTR(DIAG_HTML);
+  html.replace("__ACTIVE_ID__", String(bms.activeSlaveId));
+  html.replace("__LAST_TRIED__", String(bms.lastTriedSlaveId));
+  html.replace("__ONLINE__", String(bms.online ? "ONLINE" : "OFFLINE"));
+  html.replace("__ERRORS__", String(bms.errorCount));
+  html.replace("__OPERATING__", operatingStateText());
+  html.replace("__HEALTH_CLASS__", healthClass());
+  html.replace("__HEALTH_TEXT__", healthText());
+  html.replace("__STATUS_HEX__", formatHex16(bms.status));
+  html.replace("__STATUS_TEXT__", statusFlagsText());
+  html.replace("__STATUS_CHIPS__", activeFlagChips(bms.status, STATUS_FLAGS, sizeof(STATUS_FLAGS) / sizeof(STATUS_FLAGS[0]), "tag-status"));
+  html.replace("__WARNING_HEX__", formatHex16(bms.warning));
+  html.replace("__WARNING_TEXT__", warningFlagsText());
+  html.replace("__WARNING_CHIPS__", activeFlagChips(bms.warning, WARNING_FLAGS, sizeof(WARNING_FLAGS) / sizeof(WARNING_FLAGS[0]), "tag-warn"));
+  html.replace("__PROTECT_HEX__", formatHex16(bms.protect));
+  html.replace("__PROTECT_TEXT__", protectFlagsText());
+  html.replace("__PROTECT_CHIPS__", activeFlagChips(bms.protect, PROTECT_FLAGS, sizeof(PROTECT_FLAGS) / sizeof(PROTECT_FLAGS[0]), "tag-protect"));
+  html.replace("__CYCLES__", String(bms.cycles));
+  html.replace("__CELL_COUNT__", String(bms.cellCount ? bms.cellCount : 15));
+  html.replace("__CRC_RX__", formatHex16(bms.crcReceived));
+  html.replace("__CRC_CALC__", formatHex16(bms.crcCalculated));
+  html.replace("__RAW_REGS__", buildDiagRawRegistersHtml());
+  return html;
+}
+
+void handleDiag()
+{
+  server.send(200, "text/html", buildDiagHtml());
+}
+
+void handleJson()
+{
+  String json = "{";
+  json += "\"wifi\":{";
+  json += "\"connected\":" + String(wifiConnected() ? "true" : "false") + ",";
+  json += "\"ip\":\"" + String(wifiConnected() ? WiFi.localIP().toString() : String("n/a")) + "\"";
+  json += "},";
+  json += "\"uptime_ms\":" + String(millis()) + ",";
+  json += "\"online\":" + String(bms.online ? "true" : "false") + ",";
+  json += "\"errors\":" + String(bms.errorCount) + ",";
+  json += "\"active_slave_id\":" + String(bms.activeSlaveId) + ",";
+  json += "\"last_tried_slave_id\":" + String(bms.lastTriedSlaveId) + ",";
+  json += "\"can_enabled\":" + String(ENABLE_DEYE_CAN ? "true" : "false") + ",";
+  json += "\"mode\":\"" + String(ENABLE_DEYE_CAN ? "bms_can" : "bms_read") + "\",";
+  json += "\"mode_label\":\"" + String(ENABLE_DEYE_CAN ? "BMS + Deye CAN" : "BMS read only") + "\",";
+  json += "\"health_text\":\"" + healthText() + "\",";
+  json += "\"operating_text\":\"" + operatingStateText() + "\",";
+  json += "\"last_update_ms\":" + String(bms.lastUpdateMs) + ",";
+  json += "\"crc_received\":" + String(bms.crcReceived) + ",";
+  json += "\"crc_calculated\":" + String(bms.crcCalculated) + ",";
+  json += "\"pack_v\":" + String(bms.packV, 2) + ",";
+  json += "\"current_a\":" + String(bms.current, 2) + ",";
+  json += "\"soc\":" + String(bms.soc) + ",";
+  json += "\"soh\":" + String(bms.soh) + ",";
+  json += "\"env_temp\":" + String(bms.envTemp) + ",";
+  json += "\"max_cell_temp\":" + String(bms.maxCellTemp) + ",";
+  json += "\"remaining_ah\":" + String(bms.remainingAh) + ",";
+  json += "\"max_charge_current_limit\":" + String(bms.maxChargeCurrentLimit) + ",";
+  json += "\"status_category\":\"" + haStatusCategory() + "\",";
+  json += "\"substatus\":\"" + haSubstatusText() + "\",";
+  json += "\"status_raw\":" + String(bms.status) + ",";
+  json += "\"warning_raw\":" + String(bms.warning) + ",";
+  json += "\"protect_raw\":" + String(bms.protect) + ",";
+  json += "\"cycles\":" + String(bms.cycles) + ",";
+  json += "\"reserved_status\":" + String(bms.reservedStatus) + ",";
+  json += "\"cell_count\":" + String(bms.cellCount ? bms.cellCount : 15) + ",";
+  json += "\"cell_min_v\":" + String(bms.minCellV, 3) + ",";
+  json += "\"cell_avg_v\":" + String(bms.avgCellV, 3) + ",";
+  json += "\"cell_max_v\":" + String(bms.maxCellV, 3) + ",";
+  json += "\"cell_delta_v\":" + String(bms.cellDeltaV, 3) + ",";
+  for (int i = 0; i < 15; i++) {
+    json += "\"cell_" + String(i + 1) + "_mv\":" + String(bms.cellsV[i]) + ",";
+  }
+  json += "\"cell_voltages_mv\":[";
+  for (int i = 0; i < 15; i++) {
+    if (i > 0) {
+      json += ",";
+    }
+    json += String(bms.cellsV[i]);
+  }
+  json += "],";
+  json += "\"cells\":[";
+  for (int i = 0; i < 15; i++)
+  {
+    if (i > 0)
+      json += ",";
+    json += "{";
+    json += "\"index\":" + String(i + 1) + ",";
+    json += "\"mv\":" + String(bms.cellsV[i]) + ",";
+    json += "\"v\":" + String(bms.cellVolts[i], 3);
+    json += "}";
+  }
+  json += "],";
+  json += "\"raw_regs\":[";
+  for (uint8_t i = 0; i < bms.rawCount; i++)
+  {
+    if (i > 0)
+      json += ",";
+    json += String(bms.rawRegs[i]);
+  }
+  json += "]}";
+  server.send(200, "application/json", json);
+}
+
+void handleHaJson()
+{
+  String json = "{";
+  json += "\"online\":" + String(bms.online ? "true" : "false") + ",";
+  json += "\"active_slave_id\":" + String(bms.activeSlaveId) + ",";
+  json += "\"health_text\":\"" + healthText() + "\",";
+  json += "\"operating_text\":\"" + operatingStateText() + "\",";
+  json += "\"status\":\"" + haStatusCategory() + "\",";
+  json += "\"substatus\":\"" + haSubstatusText() + "\",";
+  json += "\"status_raw\":" + String(bms.status) + ",";
+  json += "\"warning_raw\":" + String(bms.warning) + ",";
+  json += "\"protect_raw\":" + String(bms.protect) + ",";
+  json += "\"cell_count\":" + String(bms.cellCount ? bms.cellCount : 15) + ",";
+  json += "\"pack_voltage_v\":" + String(bms.packV, 2) + ",";
+  json += "\"current_a\":" + String(bms.current, 2) + ",";
+  json += "\"soc_pct\":" + String(bms.soc) + ",";
+  json += "\"soh_pct\":" + String(bms.soh) + ",";
+  json += "\"env_temp_c\":" + String(bms.envTemp) + ",";
+  json += "\"max_cell_temp_c\":" + String(bms.maxCellTemp) + ",";
+  json += "\"remaining_ah\":" + String(bms.remainingAh) + ",";
+  json += "\"max_charge_current_limit\":" + String(bms.maxChargeCurrentLimit) + ",";
+  json += "\"cell_min_v\":" + String(bms.minCellV, 3) + ",";
+  json += "\"cell_avg_v\":" + String(bms.avgCellV, 3) + ",";
+  json += "\"cell_max_v\":" + String(bms.maxCellV, 3) + ",";
+  json += "\"cell_delta_v\":" + String(bms.cellDeltaV, 3) + ",";
+  json += "\"warning_hex\":\"" + formatHex16(bms.warning) + "\",";
+  json += "\"protect_hex\":\"" + formatHex16(bms.protect) + "\",";
+  json += "\"status_hex\":\"" + formatHex16(bms.status) + "\",";
+  json += "\"cycles\":" + String(bms.cycles) + ",";
+  json += "\"reserved_status\":" + String(bms.reservedStatus) + ",";
+  for (int i = 0; i < 15; i++)
+  {
+    json += "\"cell_" + String(i + 1) + "_mv\":" + String(bms.cellsV[i]) + ",";
+  }
+  json += "\"cell_voltages_mv\":[";
+  for (int i = 0; i < 15; i++)
+  {
+    if (i > 0)
+      json += ",";
+    json += String(bms.cellsV[i]);
+  }
+  json += "]}";
+  server.send(200, "application/json", json);
+}
+
+void setup()
+{
+  Serial.begin(115200);
+  Serial2.begin(9600, SERIAL_8N1, BMS_RX_PIN, BMS_TX_PIN);
+  pinMode(BMS_DE_PIN, OUTPUT);
+  digitalWrite(BMS_DE_PIN, LOW);
+
+  if (ENABLE_DEYE_CAN)
+  {
+    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT((gpio_num_t)CAN_TX_PIN, (gpio_num_t)CAN_RX_PIN, TWAI_MODE_NORMAL);
+    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
+    twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+    if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK)
+    {
+      twai_start();
+    }
+  }
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  server.on("/", handleRoot);
+  server.on("/diag", handleDiag);
+  server.on("/json", handleJson);
+  server.on("/ha", handleHaJson);
+  server.begin();
+}
+
+void loop()
+{
+  static unsigned long lastPoll = 0;
+  static unsigned long lastLog = 0;
+  static uint8_t scanId = PREFERRED_BMS_ID;
+
+  if (millis() - lastPoll >= 3000)
+  {
+    bool ok = requestBmsData(bms.online ? bms.activeSlaveId : scanId);
+    if (!ok && !bms.online)
+    {
+      scanId++;
+      if (scanId > BMS_ID_MAX)
+      {
+        scanId = BMS_ID_MIN;
+      }
+    }
+    lastPoll = millis();
+  }
+
+  if (millis() - lastLog >= 3000)
+  {
+    lastLog = millis();
+    Serial.print("BMS ");
+    Serial.print(bms.online ? "ONLINE" : "OFFLINE");
+    Serial.print(" active_id=");
+    Serial.print(bms.activeSlaveId);
+    Serial.print(" tried_id=");
+    Serial.print(bms.lastTriedSlaveId);
+    Serial.print(" err=");
+    Serial.print(bms.errorCount);
+    Serial.print(" crc=");
+    Serial.print(formatHex16(bms.crcReceived));
+    Serial.print("/");
+    Serial.println(formatHex16(bms.crcCalculated));
+  }
+
+  if (ENABLE_DEYE_CAN && bms.online)
+  {
+    sendDeyeCanTelemetry();
+  }
+
+  server.handleClient();
+  delay(1);
+}
 const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <!doctype html>
 <html lang="uk">
@@ -832,262 +1087,39 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
-void handleRoot()
-{
-  server.send_P(200, "text/html", INDEX_HTML);
-}
-
-void handleDiag()
-{
-  String html = "<html><head><meta charset='utf-8'><meta http-equiv='refresh' content='1'>";
-  html += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
-  html += "<style>";
-  html += "body{--bg:#111;--panel:#1a1a1a;--panel2:#202020;--text:#ececec;--muted:#a8a8a8;--line:#333;--accent:#d6d6d6;--ok:#dcdcdc;--warn:#bdbdbd;--bad:#8d8d8d;margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text);padding:18px;}";
-  html += ".card{max-width:1200px;margin:0 auto 16px auto;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--panel);}";
-  html += ".grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}";
-  html += ".cell{padding:10px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);}";
-  html += ".flag-group{margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#151515;}";
-  html += ".flag-title{color:var(--muted);font-size:11px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;}";
-  html += ".tag{display:inline-block;margin:0 6px 6px 0;padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid transparent;}";
-  html += ".tag-muted{background:#202020;color:var(--muted);border-color:var(--line);}";
-  html += ".tag-status{background:#1f2b3f;color:#dbe8ff;border-color:#35537a;}";
-  html += ".tag-warn{background:#3d3415;color:#fff2ba;border-color:#7f6a20;}";
-  html += ".tag-protect{background:#3c1818;color:#ffd0d0;border-color:#7f2e2e;}";
-  html += ".muted{color:var(--muted);font-size:12px;}";
-  html += ".soft{color:var(--muted);}";
-  html += ".ok{color:var(--ok);}.warn{color:var(--warn);}.bad{color:var(--bad);}";
-  html += "a{color:var(--accent);text-decoration:none;}";
-  html += "</style></head><body>";
-  html += "<div class='card'><h1>Diagnostics</h1>";
-  html += "<div>Active ID: " + String(bms.activeSlaveId) + " | Last tried: " + String(bms.lastTriedSlaveId) + "</div>";
-  html += "<div>Status: " + String(bms.online ? "ONLINE" : "OFFLINE") + " | Errors: " + String(bms.errorCount) + "</div>";
-  html += "<div>Operating state: " + operatingStateText() + "</div>";
-  html += "<div>Health: <span class='" + healthClass() + "'>" + healthText() + "</span></div>";
-  html += "<div>Status: " + formatHex16(bms.status) + " <span class='muted'>(" + statusFlagsText() + ")</span>";
-  html += activeFlagChips(bms.status, STATUS_FLAGS, sizeof(STATUS_FLAGS) / sizeof(STATUS_FLAGS[0]), "tag-status");
-  html += "</div>";
-  html += "<div>Warning: " + formatHex16(bms.warning) + " <span class='muted'>(" + warningFlagsText() + ")</span>";
-  html += activeFlagChips(bms.warning, WARNING_FLAGS, sizeof(WARNING_FLAGS) / sizeof(WARNING_FLAGS[0]), "tag-warn");
-  html += "</div>";
-  html += "<div>Protect: " + formatHex16(bms.protect) + " <span class='muted'>(" + protectFlagsText() + ")</span>";
-  html += activeFlagChips(bms.protect, PROTECT_FLAGS, sizeof(PROTECT_FLAGS) / sizeof(PROTECT_FLAGS[0]), "tag-protect");
-  html += "</div>";
-  html += "<div>Cycles: " + String(bms.cycles) + "</div>";
-  html += "<div>Cell count: " + String(bms.cellCount ? bms.cellCount : 15) + "</div>";
-  html += "<div>CRC rx: " + formatHex16(bms.crcReceived) + " | CRC calc: " + formatHex16(bms.crcCalculated) + "</div>";
-  html += "<div><a href='/'>Back to dashboard</a></div>";
-  html += "</div>";
-
-  html += "<div class='card'><h2>Raw registers</h2><div class='grid'>";
-  html += "<div class='muted' style='margin-bottom:10px'>0x1F..0x23 look like auxiliary/config fields on this pack, not temperatures.</div>";
-  for (uint8_t i = 0; i < bms.rawCount; i++)
-  {
-    html += "<div class='cell'><div class='muted'>Field</div><div><strong>";
-    html += rawRegisterName(i);
-    html += "</strong></div><div class='muted'>Reg 0x";
-    char idxBuf[8];
-    snprintf(idxBuf, sizeof(idxBuf), "%04X", i);
-    html += idxBuf;
-    html += "</div><div><strong>";
-    html += formatHex16(bms.rawRegs[i]);
-    html += "</strong></div><div class='muted'>";
-    html += String(bms.rawRegs[i]);
-    html += "</div></div>";
-  }
-  html += "</div></div>";
-  html += "</body></html>";
-  server.send(200, "text/html", html);
-}
-
-void handleJson()
-{
-  String json = "{";
-  json += "\"wifi\":{";
-  json += "\"connected\":" + String(wifiConnected() ? "true" : "false") + ",";
-  json += "\"ip\":\"" + String(wifiConnected() ? WiFi.localIP().toString() : String("n/a")) + "\"";
-  json += "},";
-  json += "\"uptime_ms\":" + String(millis()) + ",";
-  json += "\"online\":" + String(bms.online ? "true" : "false") + ",";
-  json += "\"errors\":" + String(bms.errorCount) + ",";
-  json += "\"active_slave_id\":" + String(bms.activeSlaveId) + ",";
-  json += "\"last_tried_slave_id\":" + String(bms.lastTriedSlaveId) + ",";
-  json += "\"can_enabled\":" + String(ENABLE_DEYE_CAN ? "true" : "false") + ",";
-  json += "\"mode\":\"" + String(ENABLE_DEYE_CAN ? "bms_can" : "bms_read") + "\",";
-  json += "\"mode_label\":\"" + String(ENABLE_DEYE_CAN ? "BMS + Deye CAN" : "BMS read only") + "\",";
-  json += "\"health_text\":\"" + healthText() + "\",";
-  json += "\"operating_text\":\"" + operatingStateText() + "\",";
-  json += "\"last_update_ms\":" + String(bms.lastUpdateMs) + ",";
-  json += "\"crc_received\":" + String(bms.crcReceived) + ",";
-  json += "\"crc_calculated\":" + String(bms.crcCalculated) + ",";
-  json += "\"pack_v\":" + String(bms.packV, 2) + ",";
-  json += "\"current_a\":" + String(bms.current, 2) + ",";
-  json += "\"soc\":" + String(bms.soc) + ",";
-  json += "\"soh\":" + String(bms.soh) + ",";
-  json += "\"env_temp\":" + String(bms.envTemp) + ",";
-  json += "\"max_cell_temp\":" + String(bms.maxCellTemp) + ",";
-  json += "\"remaining_ah\":" + String(bms.remainingAh) + ",";
-  json += "\"max_charge_current_limit\":" + String(bms.maxChargeCurrentLimit) + ",";
-  json += "\"status_category\":\"" + haStatusCategory() + "\",";
-  json += "\"substatus\":\"" + haSubstatusText() + "\",";
-  json += "\"status_raw\":" + String(bms.status) + ",";
-  json += "\"warning_raw\":" + String(bms.warning) + ",";
-  json += "\"protect_raw\":" + String(bms.protect) + ",";
-  json += "\"cycles\":" + String(bms.cycles) + ",";
-  json += "\"reserved_status\":" + String(bms.reservedStatus) + ",";
-  json += "\"cell_count\":" + String(bms.cellCount ? bms.cellCount : 15) + ",";
-  json += "\"cell_min_v\":" + String(bms.minCellV, 3) + ",";
-  json += "\"cell_avg_v\":" + String(bms.avgCellV, 3) + ",";
-  json += "\"cell_max_v\":" + String(bms.maxCellV, 3) + ",";
-  json += "\"cell_delta_v\":" + String(bms.cellDeltaV, 3) + ",";
-  for (int i = 0; i < 15; i++) {
-    json += "\"cell_" + String(i + 1) + "_mv\":" + String(bms.cellsV[i]) + ",";
-  }
-  json += "\"cell_voltages_mv\":[";
-  for (int i = 0; i < 15; i++) {
-    if (i > 0) {
-      json += ",";
-    }
-    json += String(bms.cellsV[i]);
-  }
-  json += "],";
-  json += "\"cells\":[";
-  for (int i = 0; i < 15; i++)
-  {
-    if (i > 0)
-      json += ",";
-    json += "{";
-    json += "\"index\":" + String(i + 1) + ",";
-    json += "\"mv\":" + String(bms.cellsV[i]) + ",";
-    json += "\"v\":" + String(bms.cellVolts[i], 3);
-    json += "}";
-  }
-  json += "],";
-  json += "\"raw_regs\":[";
-  for (uint8_t i = 0; i < bms.rawCount; i++)
-  {
-    if (i > 0)
-      json += ",";
-    json += String(bms.rawRegs[i]);
-  }
-  json += "]}";
-  server.send(200, "application/json", json);
-}
-
-void handleHaJson()
-{
-  String json = "{";
-  json += "\"online\":" + String(bms.online ? "true" : "false") + ",";
-  json += "\"active_slave_id\":" + String(bms.activeSlaveId) + ",";
-  json += "\"health_text\":\"" + healthText() + "\",";
-  json += "\"operating_text\":\"" + operatingStateText() + "\",";
-  json += "\"status\":\"" + haStatusCategory() + "\",";
-  json += "\"substatus\":\"" + haSubstatusText() + "\",";
-  json += "\"status_raw\":" + String(bms.status) + ",";
-  json += "\"warning_raw\":" + String(bms.warning) + ",";
-  json += "\"protect_raw\":" + String(bms.protect) + ",";
-  json += "\"cell_count\":" + String(bms.cellCount ? bms.cellCount : 15) + ",";
-  json += "\"pack_voltage_v\":" + String(bms.packV, 2) + ",";
-  json += "\"current_a\":" + String(bms.current, 2) + ",";
-  json += "\"soc_pct\":" + String(bms.soc) + ",";
-  json += "\"soh_pct\":" + String(bms.soh) + ",";
-  json += "\"env_temp_c\":" + String(bms.envTemp) + ",";
-  json += "\"max_cell_temp_c\":" + String(bms.maxCellTemp) + ",";
-  json += "\"remaining_ah\":" + String(bms.remainingAh) + ",";
-  json += "\"max_charge_current_limit\":" + String(bms.maxChargeCurrentLimit) + ",";
-  json += "\"cell_min_v\":" + String(bms.minCellV, 3) + ",";
-  json += "\"cell_avg_v\":" + String(bms.avgCellV, 3) + ",";
-  json += "\"cell_max_v\":" + String(bms.maxCellV, 3) + ",";
-  json += "\"cell_delta_v\":" + String(bms.cellDeltaV, 3) + ",";
-  json += "\"warning_hex\":\"" + formatHex16(bms.warning) + "\",";
-  json += "\"protect_hex\":\"" + formatHex16(bms.protect) + "\",";
-  json += "\"status_hex\":\"" + formatHex16(bms.status) + "\",";
-  json += "\"cycles\":" + String(bms.cycles) + ",";
-  json += "\"reserved_status\":" + String(bms.reservedStatus) + ",";
-  for (int i = 0; i < 15; i++)
-  {
-    json += "\"cell_" + String(i + 1) + "_mv\":" + String(bms.cellsV[i]) + ",";
-  }
-  json += "\"cell_voltages_mv\":[";
-  for (int i = 0; i < 15; i++)
-  {
-    if (i > 0)
-      json += ",";
-    json += String(bms.cellsV[i]);
-  }
-  json += "]}";
-  server.send(200, "application/json", json);
-}
-
-void setup()
-{
-  Serial.begin(115200);
-  Serial2.begin(9600, SERIAL_8N1, BMS_RX_PIN, BMS_TX_PIN);
-  pinMode(BMS_DE_PIN, OUTPUT);
-  digitalWrite(BMS_DE_PIN, LOW);
-
-  if (ENABLE_DEYE_CAN)
-  {
-    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT((gpio_num_t)CAN_TX_PIN, (gpio_num_t)CAN_RX_PIN, TWAI_MODE_NORMAL);
-    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
-    twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-    if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK)
-    {
-      twai_start();
-    }
-  }
-
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-  server.on("/", handleRoot);
-  server.on("/diag", handleDiag);
-  server.on("/json", handleJson);
-  server.on("/ha", handleHaJson);
-  server.begin();
-}
-
-void loop()
-{
-  static unsigned long lastPoll = 0;
-  static unsigned long lastLog = 0;
-  static uint8_t scanId = PREFERRED_BMS_ID;
-
-  if (millis() - lastPoll >= 3000)
-  {
-    bool ok = requestBmsData(bms.online ? bms.activeSlaveId : scanId);
-    if (!ok && !bms.online)
-    {
-      scanId++;
-      if (scanId > BMS_ID_MAX)
-      {
-        scanId = BMS_ID_MIN;
-      }
-    }
-    lastPoll = millis();
-  }
-
-  if (millis() - lastLog >= 3000)
-  {
-    lastLog = millis();
-    Serial.print("BMS ");
-    Serial.print(bms.online ? "ONLINE" : "OFFLINE");
-    Serial.print(" active_id=");
-    Serial.print(bms.activeSlaveId);
-    Serial.print(" tried_id=");
-    Serial.print(bms.lastTriedSlaveId);
-    Serial.print(" err=");
-    Serial.print(bms.errorCount);
-    Serial.print(" crc=");
-    Serial.print(formatHex16(bms.crcReceived));
-    Serial.print("/");
-    Serial.println(formatHex16(bms.crcCalculated));
-  }
-
-  if (ENABLE_DEYE_CAN && bms.online)
-  {
-    sendDeyeCanTelemetry();
-  }
-
-  server.handleClient();
-  delay(1);
-}
+const char DIAG_HTML[] PROGMEM = R"rawliteral(
+<html><head><meta charset='utf-8'><meta http-equiv='refresh' content='1'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<style>
+body{--bg:#111;--panel:#1a1a1a;--panel2:#202020;--text:#ececec;--muted:#a8a8a8;--line:#333;--accent:#d6d6d6;--ok:#dcdcdc;--warn:#bdbdbd;--bad:#8d8d8d;margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text);padding:18px;}
+.card{max-width:1200px;margin:0 auto 16px auto;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--panel);}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
+.cell{padding:10px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);}
+.flag-group{margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#151515;}
+.flag-title{color:var(--muted);font-size:11px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;}
+.tag{display:inline-block;margin:0 6px 6px 0;padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid transparent;}
+.tag-muted{background:#202020;color:var(--muted);border-color:var(--line);}
+.tag-status{background:#1f2b3f;color:#dbe8ff;border-color:#35537a;}
+.tag-warn{background:#3d3415;color:#fff2ba;border-color:#7f6a20;}
+.tag-protect{background:#3c1818;color:#ffd0d0;border-color:#7f2e2e;}
+.muted{color:var(--muted);font-size:12px;}
+.soft{color:var(--muted);}
+.ok{color:var(--ok);}.warn{color:var(--warn);}.bad{color:var(--bad);}
+a{color:var(--accent);text-decoration:none;}
+</style></head><body>
+<div class='card'><h1>Diagnostics</h1>
+<div>Active ID: __ACTIVE_ID__ | Last tried: __LAST_TRIED__</div>
+<div>Status: __ONLINE__ | Errors: __ERRORS__</div>
+<div>Operating state: __OPERATING__</div>
+<div>Health: <span class='__HEALTH_CLASS__'>__HEALTH_TEXT__</span></div>
+<div>Status: __STATUS_HEX__ <span class='muted'>(__STATUS_TEXT__)</span>__STATUS_CHIPS__</div>
+<div>Warning: __WARNING_HEX__ <span class='muted'>(__WARNING_TEXT__)</span>__WARNING_CHIPS__</div>
+<div>Protect: __PROTECT_HEX__ <span class='muted'>(__PROTECT_TEXT__)</span>__PROTECT_CHIPS__</div>
+<div>Cycles: __CYCLES__</div>
+<div>Cell count: __CELL_COUNT__</div>
+<div>CRC rx: __CRC_RX__ | CRC calc: __CRC_CALC__</div>
+<div><a href='/'>Back to dashboard</a></div>
+</div>
+__RAW_REGS__
+</body></html>
+)rawliteral";
