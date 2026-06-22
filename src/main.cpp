@@ -369,6 +369,24 @@ String protectFlagsText()
   return decodeBitmask(bms.protect, PROTECT_FLAGS, sizeof(PROTECT_FLAGS) / sizeof(PROTECT_FLAGS[0]));
 }
 
+String haStatusCategory()
+{
+  if (bms.protect != 0)
+    return "protected";
+  if (bms.warning != 0)
+    return "warning";
+  return "status";
+}
+
+String haSubstatusText()
+{
+  if (bms.protect != 0)
+    return protectFlagsText();
+  if (bms.warning != 0)
+    return warningFlagsText();
+  return statusFlagsText();
+}
+
 void clearSnapshotData()
 {
   bms.online = false;
@@ -625,6 +643,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
           <div>
             <div class="label">Status</div>
             <div class="value" id="statusText">-</div>
+            <div class="muted" style="margin-top:4px">Substatus: <strong id="substatusText">-</strong></div>
           </div>
           <div style="min-width:220px;flex:1">
             <div class="label">SOC</div>
@@ -696,9 +715,9 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       if (!data.online) return 'Offline';
       const currentA = Number(data.current_a || 0);
       const soc = Number(data.soc || 0);
-      const warning = Number(data.warning || 0);
-      const protect = Number(data.protect || 0);
-      const status = Number(data.status || 0);
+      const warning = Number(data.warning_raw || 0);
+      const protect = Number(data.protect_raw || 0);
+      const status = Number(data.status_raw || 0);
 
       if (warning === 2 && protect === 4096 && status === 0 && Math.abs(currentA) < 0.5 && soc >= 95) {
         return 'Standby';
@@ -779,6 +798,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         const s = badgeForOnline(data.online);
         setText('statusText', s.text);
         byId('statusText').className = 'value ' + s.cls;
+        setText('substatusText', data.substatus || '-');
         setText('packV', fmt(data.pack_v || 0, 2) + ' V');
         setText('currentA', fmt(data.current_a || 0, 2) + ' A');
         setText('soh', (data.soh ?? '-') + '%');
@@ -896,9 +916,6 @@ void handleJson()
   json += "\"mode_label\":\"" + String(ENABLE_DEYE_CAN ? "BMS + Deye CAN" : "BMS read only") + "\",";
   json += "\"health_text\":\"" + healthText() + "\",";
   json += "\"operating_text\":\"" + operatingStateText() + "\",";
-  json += "\"status_flags\":\"" + statusFlagsText() + "\",";
-  json += "\"warning_flags\":\"" + warningFlagsText() + "\",";
-  json += "\"protect_flags\":\"" + protectFlagsText() + "\",";
   json += "\"last_update_ms\":" + String(bms.lastUpdateMs) + ",";
   json += "\"crc_received\":" + String(bms.crcReceived) + ",";
   json += "\"crc_calculated\":" + String(bms.crcCalculated) + ",";
@@ -910,9 +927,11 @@ void handleJson()
   json += "\"max_cell_temp\":" + String(bms.maxCellTemp) + ",";
   json += "\"remaining_ah\":" + String(bms.remainingAh) + ",";
   json += "\"max_charge_current_limit\":" + String(bms.maxChargeCurrentLimit) + ",";
-  json += "\"status\":" + String(bms.status) + ",";
-  json += "\"warning\":" + String(bms.warning) + ",";
-  json += "\"protect\":" + String(bms.protect) + ",";
+  json += "\"status_category\":\"" + haStatusCategory() + "\",";
+  json += "\"substatus\":\"" + haSubstatusText() + "\",";
+  json += "\"status_raw\":" + String(bms.status) + ",";
+  json += "\"warning_raw\":" + String(bms.warning) + ",";
+  json += "\"protect_raw\":" + String(bms.protect) + ",";
   json += "\"cycles\":" + String(bms.cycles) + ",";
   json += "\"reserved_status\":" + String(bms.reservedStatus) + ",";
   json += "\"cell_count\":" + String(bms.cellCount ? bms.cellCount : 15) + ",";
@@ -961,9 +980,11 @@ void handleHaJson()
   json += "\"active_slave_id\":" + String(bms.activeSlaveId) + ",";
   json += "\"health_text\":\"" + healthText() + "\",";
   json += "\"operating_text\":\"" + operatingStateText() + "\",";
-  json += "\"status_flags\":\"" + statusFlagsText() + "\",";
-  json += "\"warning_flags\":\"" + warningFlagsText() + "\",";
-  json += "\"protect_flags\":\"" + protectFlagsText() + "\",";
+  json += "\"status\":\"" + haStatusCategory() + "\",";
+  json += "\"substatus\":\"" + haSubstatusText() + "\",";
+  json += "\"status_raw\":" + String(bms.status) + ",";
+  json += "\"warning_raw\":" + String(bms.warning) + ",";
+  json += "\"protect_raw\":" + String(bms.protect) + ",";
   json += "\"cell_count\":" + String(bms.cellCount ? bms.cellCount : 15) + ",";
   json += "\"pack_voltage_v\":" + String(bms.packV, 2) + ",";
   json += "\"current_a\":" + String(bms.current, 2) + ",";
