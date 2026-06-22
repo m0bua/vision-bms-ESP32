@@ -39,8 +39,8 @@ struct BmsSnapshot
   uint16_t cycles = 0;
   uint16_t reservedStatus = 0;
   uint16_t cellCount = 0;
-  uint16_t cellsV[15] = {0};
-  float cellVolts[15] = {0.0f};
+  uint16_t cellsV[16] = {0};
+  float cellVolts[16] = {0.0f};
   float minCellV = 0.0f;
   float maxCellV = 0.0f;
   float avgCellV = 0.0f;
@@ -138,10 +138,14 @@ const char *rawRegisterName(uint8_t index)
     return "cell 14";
   case 0x10:
     return "cell 15";
+  case 0x11:
+    return "cell 16";
+  case 0x12:
+    return "temp 1";
   case 0x13:
-    return "env temp";
+    return "temp 2";
   case 0x14:
-    return "max cell temp";
+    return "temp 3";
   case 0x15:
     return "remaining Ah";
   case 0x16:
@@ -150,16 +154,14 @@ const char *rawRegisterName(uint8_t index)
     return "SOH";
   case 0x18:
     return "SOC";
-  case 0x19:
-    return "status";
   case 0x1A:
-    return "warning";
-  case 0x1B:
-    return "protect";
-  case 0x1C:
     return "cycles";
+  case 0x1B:
+    return "status";
+  case 0x1C:
+    return "warning";
   case 0x1D:
-    return "reserved status";
+    return "protect";
   case 0x1E:
     return "cell count";
   case 0x1F:
@@ -420,7 +422,7 @@ void decodeSnapshot()
   float minCell = 1000.0f;
   float maxCell = 0.0f;
   float sumCell = 0.0f;
-  for (int i = 0; i < 15; i++)
+  for (int i = 0; i < 16; i++)
   {
     bms.cellsV[i] = bms.rawRegs[2 + i];
     bms.cellVolts[i] = bms.cellsV[i] / 1000.0f;
@@ -440,21 +442,21 @@ void decodeSnapshot()
   bms.avgCellV = sumCell / 15.0f;
   bms.cellDeltaV = maxCell - minCell;
 
-  bms.envTemp = (int16_t)bms.rawRegs[0x13];
-  bms.maxCellTemp = (int16_t)bms.rawRegs[0x14];
+  bms.envTemp = (int16_t)bms.rawRegs[0x12];
+  bms.maxCellTemp = (int16_t)bms.rawRegs[0x13];
+  bms.tempPCB = (int16_t)bms.rawRegs[0x14];
   bms.remainingAh = bms.rawRegs[0x15];
   bms.maxChargeCurrentLimit = bms.rawRegs[0x16];
   bms.soh = bms.rawRegs[0x17];
   bms.soc = bms.rawRegs[0x18];
-  // Raw samples match the original layout: 0x19=status, 0x1A=warning, 0x1B=protect.
-  bms.status = bms.rawRegs[0x19];
-  bms.warning = bms.rawRegs[0x1A];
-  bms.protect = bms.rawRegs[0x1B];
-  bms.cycles = bms.rawRegs[0x1C];
-  bms.reservedStatus = bms.rawRegs[0x1D];
+  // Tentative mapping based on observed values: 0x1B=status, 0x1C=warning, 0x1D=protect.
+  bms.reservedStatus = bms.rawRegs[0x19];
+  bms.cycles = bms.rawRegs[0x1A];
+  bms.status = bms.rawRegs[0x1B];
+  bms.warning = bms.rawRegs[0x1C];
+  bms.protect = bms.rawRegs[0x1D];
   bms.cellCount = bms.rawRegs[0x1E];
   // 0x1F..0x23 do not map cleanly to direct voltages; keep them as auxiliary/config fields.
-  bms.tempPCB = bms.envTemp;
 }
 
 bool requestBmsData(uint8_t slaveId)
@@ -648,8 +650,9 @@ void fillTelemetryJson(JsonObject root, bool haFormat)
     root["current_a"] = bms.current;
     root["soc"] = bms.soc;
     root["soh"] = bms.soh;
-    root["env_temp"] = bms.envTemp;
-    root["max_cell_temp"] = bms.maxCellTemp;
+    root["temp_1_c"] = bms.envTemp;
+    root["temp_2_c"] = bms.maxCellTemp;
+    root["temp_3_c"] = bms.tempPCB;
     root["remaining_ah"] = bms.remainingAh;
     root["max_charge_current_limit"] = bms.maxChargeCurrentLimit;
     root["status_category"] = haStatusCategory();
@@ -667,7 +670,7 @@ void fillTelemetryJson(JsonObject root, bool haFormat)
 
     JsonArray cellVoltages = root.createNestedArray("cell_voltages_mv");
     JsonArray cells = root.createNestedArray("cells");
-    for (int i = 0; i < 15; i++)
+    for (int i = 0; i < 16; i++)
     {
       root[String("cell_") + String(i + 1) + "_mv"] = bms.cellsV[i];
       cellVoltages.add(bms.cellsV[i]);
@@ -700,8 +703,9 @@ void fillTelemetryJson(JsonObject root, bool haFormat)
   root["current_a"] = bms.current;
   root["soc_pct"] = bms.soc;
   root["soh_pct"] = bms.soh;
-  root["env_temp_c"] = bms.envTemp;
-  root["max_cell_temp_c"] = bms.maxCellTemp;
+  root["temp_1_c"] = bms.envTemp;
+  root["temp_2_c"] = bms.maxCellTemp;
+  root["temp_3_c"] = bms.tempPCB;
   root["remaining_ah"] = bms.remainingAh;
   root["max_charge_current_limit"] = bms.maxChargeCurrentLimit;
   root["cell_min_v"] = bms.minCellV;
@@ -714,13 +718,13 @@ void fillTelemetryJson(JsonObject root, bool haFormat)
   root["cycles"] = bms.cycles;
   root["reserved_status"] = bms.reservedStatus;
 
-  for (int i = 0; i < 15; i++)
+  for (int i = 0; i < 16; i++)
   {
     root[String("cell_") + String(i + 1) + "_mv"] = bms.cellsV[i];
   }
 
   JsonArray cellVoltages = root.createNestedArray("cell_voltages_mv");
-  for (int i = 0; i < 15; i++)
+  for (int i = 0; i < 16; i++)
   {
     cellVoltages.add(bms.cellsV[i]);
   }
@@ -902,8 +906,11 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
           <div><span class="muted">SOH:</span> <strong id="soh">-</strong></div>
         </div>
         <div class="row" style="margin-top:12px">
-          <div><span class="muted">Env temp:</span> <strong id="envTemp">-</strong></div>
-          <div><span class="muted">Max cell temp:</span> <strong id="maxCellTemp">-</strong></div>
+          <div><span class="muted">Temp 1:</span> <strong id="temp1">-</strong></div>
+          <div><span class="muted">Temp 2:</span> <strong id="temp2">-</strong></div>
+          <div><span class="muted">Temp 3:</span> <strong id="temp3">-</strong></div>
+        </div>
+        <div class="row" style="margin-top:12px">
           <div><span class="muted">Remaining Ah:</span> <strong id="remainingAh">-</strong></div>
         </div>
         <div class="row">
@@ -972,35 +979,35 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       return data.operating_text || data.health_text || '-';
     }
 
-    function extractCellMvList(data) {
+    function extractCellSlots(data) {
       const cells = [];
       if (Array.isArray(data.cells) && data.cells.length) {
-        data.cells.forEach((cell) => {
+        data.cells.forEach((cell, index) => {
           if (typeof cell === 'number') {
-            cells.push(Number(cell || 0));
+            cells.push({ index: index + 1, mv: Number(cell || 0) });
             return;
           }
           if (cell && typeof cell === 'object') {
             if (cell.mv != null) {
-              cells.push(Number(cell.mv || 0));
+              cells.push({ index: Number(cell.index || index + 1), mv: Number(cell.mv || 0) });
               return;
             }
             if (cell.v != null) {
-              cells.push(Number(cell.v || 0) * 1000);
+              cells.push({ index: Number(cell.index || index + 1), mv: Number(cell.v || 0) * 1000 });
               return;
             }
           }
-          cells.push(0);
+          cells.push({ index: index + 1, mv: 0 });
         });
       } else if (Array.isArray(data.cell_voltages_mv) && data.cell_voltages_mv.length) {
-        data.cell_voltages_mv.forEach((mv) => cells.push(Number(mv || 0)));
-      } else if (Array.isArray(data.raw_regs) && data.raw_regs.length >= 17) {
-        data.raw_regs.slice(2, 17).forEach((reg) => cells.push(Number(reg || 0)));
+        data.cell_voltages_mv.forEach((mv, index) => cells.push({ index: index + 1, mv: Number(mv || 0) }));
+      } else if (Array.isArray(data.raw_regs) && data.raw_regs.length >= 18) {
+        data.raw_regs.slice(2, 18).forEach((reg, index) => cells.push({ index: index + 1, mv: Number(reg || 0) }));
       } else {
-        for (let i = 1; i <= 15; i++) {
+        for (let i = 1; i <= 16; i++) {
           const key = 'cell_' + i + '_mv';
           if (data[key] != null)
-            cells.push(Number(data[key] || 0));
+            cells.push({ index: i, mv: Number(data[key] || 0) });
         }
       }
       return cells;
@@ -1009,14 +1016,15 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     function renderCells(data, minMv, maxMv) {
       const grid = byId('cellGrid');
       grid.innerHTML = '';
-      const mvList = extractCellMvList(data);
-      mvList.forEach((mv, i) => {
-        const v = (mv / 1000).toFixed(3);
+      const slots = extractCellSlots(data);
+      slots.forEach((slot) => {
+        if (!slot.mv) return;
+        const v = (slot.mv / 1000).toFixed(3);
         const el = document.createElement('div');
         el.className = 'cell';
-        if (mv === minMv) el.classList.add('low');
-        if (mv === maxMv) el.classList.add('high');
-        el.innerHTML = '<div class="a">Cell ' + (i + 1) + '</div>' +
+        if (slot.mv === minMv) el.classList.add('low');
+        if (slot.mv === maxMv) el.classList.add('high');
+        el.innerHTML = '<div class="a">Cell ' + slot.index + '</div>' +
                        '<div class="v">' + v + ' V</div>';
         grid.appendChild(el);
       });
@@ -1047,16 +1055,17 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         setText('packV', fmt(data.pack_v || 0, 2) + ' V');
         setText('currentA', fmt(data.current_a || 0, 2) + ' A');
         setText('soh', (data.soh ?? '-') + '%');
-        setText('envTemp', (data.env_temp ?? '-') + ' C');
-        setText('maxCellTemp', (data.max_cell_temp ?? '-') + ' C');
+        setText('temp1', (data.temp_1_c ?? '-') + ' C');
+        setText('temp2', (data.temp_2_c ?? '-') + ' C');
+        setText('temp3', (data.temp_3_c ?? '-') + ' C');
         setText('remainingAh', data.remaining_ah ?? '-');
         setText('cellMin', fmt(data.cell_min_v || 0, 3) + ' V');
         setText('cellAvg', fmt(data.cell_avg_v || 0, 3) + ' V');
         setText('cellMax', fmt(data.cell_max_v || 0, 3) + ' V');
         setText('cellDelta', fmt(data.cell_delta_v || 0, 3) + ' V');
         setText('healthText', deriveOperatingText(data));
-        const mvList = extractCellMvList(data);
-        const cellCount = Number(data.cell_count || mvList.length || 0);
+        const mvList = extractCellSlots(data);
+        const cellCount = Number(data.cell_count || mvList.filter((slot) => slot.mv).length || 0);
         setText('cellCount', cellCount > 0 ? String(cellCount) : '-');
 
         const soc = clamp(Number(data.soc || 0), 0, 100);

@@ -30,8 +30,9 @@ rest:
           - current_a
           - soc_pct
           - soh_pct
-          - env_temp_c
-          - max_cell_temp_c
+          - temp_1_c
+          - temp_2_c
+          - temp_3_c
           - remaining_ah
           - max_charge_current_limit
           - cell_min_v
@@ -94,15 +95,21 @@ template:
         state: "{{ state_attr('sensor.bms_raw', 'soh_pct') }}"
         unit_of_measurement: "%"
         state_class: measurement
-      - name: BMS Env Temp
-        unique_id: bms_env_temp
-        state: "{{ state_attr('sensor.bms_raw', 'env_temp_c') }}"
+      - name: BMS Temp 1
+        unique_id: bms_temp_1
+        state: "{{ state_attr('sensor.bms_raw', 'temp_1_c') }}"
         unit_of_measurement: "°C"
         device_class: temperature
         state_class: measurement
-      - name: BMS Max Cell Temp
-        unique_id: bms_max_cell_temp
-        state: "{{ state_attr('sensor.bms_raw', 'max_cell_temp_c') }}"
+      - name: BMS Temp 2
+        unique_id: bms_temp_2
+        state: "{{ state_attr('sensor.bms_raw', 'temp_2_c') }}"
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+      - name: BMS Temp 3
+        unique_id: bms_temp_3
+        state: "{{ state_attr('sensor.bms_raw', 'temp_3_c') }}"
         unit_of_measurement: "°C"
         device_class: temperature
         state_class: measurement
