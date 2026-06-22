@@ -1,7 +1,27 @@
 #include <Arduino.h>
 #include "ui_theme.h"
 
-const char UI_SHARED_CSS[] PROGMEM = R"rawliteral(
+extern const char UI_THEME_BASE_VARS[] PROGMEM = R"rawliteral(
+  --bg:#121212;
+  --text:#f2f2f2;
+  --muted:#a8a8a8;
+  --ok:#4caf50;
+  --warn:#ffb74d;
+  --bad:#ef5350;
+  --accent:#80cbc4;
+  --panel:#1d1d1d;
+  --panel2:#262626;
+  --line:#353535;
+  --cell-low-bg:#181818;
+  --cell-high-bg:#242424;
+  --fill-low:#6e6e6e;
+  --fill-mid:#9c9c9c;
+  --fill-high:#d0d0d0;
+)rawliteral";
+
+extern const char UI_THEME_CUSTOM_VARS[] PROGMEM = "";
+
+extern const char UI_SHARED_CSS[] PROGMEM = R"rawliteral(
   *{box-sizing:border-box}
     body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
   .muted{color:var(--muted)}
@@ -9,7 +29,7 @@ const char UI_SHARED_CSS[] PROGMEM = R"rawliteral(
   a{color:var(--accent);text-decoration:none}
 )rawliteral";
 
-const char UI_SHARED_JS[] PROGMEM = R"rawliteral(
+extern const char UI_SHARED_JS[] PROGMEM = R"rawliteral(
   const byId = (id) => document.getElementById(id);
   const hex16 = (n) => '0x' + (n >>> 0).toString(16).toUpperCase().padStart(4, '0');
   const fmt = (v, d = 0) => Number(v).toFixed(d);
@@ -67,7 +87,7 @@ const char UI_SHARED_JS[] PROGMEM = R"rawliteral(
   }
 )rawliteral";
 
-const char INDEX_HTML[] PROGMEM = R"rawliteral(
+extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <!doctype html>
 <html lang="uk">
 <head>
@@ -262,7 +282,7 @@ __UI_SHARED_JS__
 </html>
 )rawliteral";
 
-const char DIAG_HTML[] PROGMEM = R"rawliteral(
+extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
 <html><head><meta charset='utf-8'><meta http-equiv='refresh' content='1'>
 <meta name='viewport' content='width=device-width, initial-scale=1'>
 <style>
