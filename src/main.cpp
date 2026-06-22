@@ -98,6 +98,83 @@ String formatHex16(uint16_t value)
   return String(buf);
 }
 
+const char *rawRegisterName(uint8_t index)
+{
+  switch (index)
+  {
+  case 0x00:
+    return "pack voltage";
+  case 0x01:
+    return "current";
+  case 0x02:
+    return "cell 1";
+  case 0x03:
+    return "cell 2";
+  case 0x04:
+    return "cell 3";
+  case 0x05:
+    return "cell 4";
+  case 0x06:
+    return "cell 5";
+  case 0x07:
+    return "cell 6";
+  case 0x08:
+    return "cell 7";
+  case 0x09:
+    return "cell 8";
+  case 0x0A:
+    return "cell 9";
+  case 0x0B:
+    return "cell 10";
+  case 0x0C:
+    return "cell 11";
+  case 0x0D:
+    return "cell 12";
+  case 0x0E:
+    return "cell 13";
+  case 0x0F:
+    return "cell 14";
+  case 0x10:
+    return "cell 15";
+  case 0x13:
+    return "env temp";
+  case 0x14:
+    return "max cell temp";
+  case 0x15:
+    return "remaining Ah";
+  case 0x16:
+    return "max charge current";
+  case 0x17:
+    return "SOH";
+  case 0x18:
+    return "SOC";
+  case 0x19:
+    return "status";
+  case 0x1A:
+    return "warning";
+  case 0x1B:
+    return "protect";
+  case 0x1C:
+    return "cycles";
+  case 0x1D:
+    return "reserved status";
+  case 0x1E:
+    return "cell count";
+  case 0x1F:
+    return "full charge cap hi";
+  case 0x20:
+    return "full charge cap lo";
+  case 0x21:
+    return "cell temp 1";
+  case 0x22:
+    return "cell temp 2";
+  case 0x23:
+    return "cell temp 3";
+  default:
+    return "reserved";
+  }
+}
+
 String formatUptime()
 {
   unsigned long sec = millis() / 1000UL;
@@ -473,7 +550,6 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
           <div class="row" style="margin-top:10px">
             <div><span class="muted">Cell count:</span> <strong id="cellCount">-</strong></div>
             <div><span class="muted">State:</span> <strong id="healthText">-</strong></div>
-            <div><span class="muted">Flags:</span> <strong id="flagText">-</strong></div>
           </div>
           <div class="row" style="margin-top:8px">
             <div><span class="muted">Min:</span> <strong id="cellMin">-</strong></div>
@@ -613,10 +689,6 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         setText('cellMax', fmt(data.cell_max_v || 0, 3) + ' V');
         setText('cellDelta', fmt(data.cell_delta_v || 0, 3) + ' V');
         setText('healthText', deriveOperatingText(data));
-        setText('flagText', 'S: ' + String(data.status ?? 0) +
-          '  W: ' + String(data.warning ?? 0) +
-          '  P: ' + String(data.protect ?? 0) +
-          '  C: ' + String(data.cycles ?? 0));
         const mvList = extractCellMvList(data);
         const cellCount = Number(data.cell_count || mvList.length || 0);
         setText('cellCount', cellCount > 0 ? String(cellCount) : '-');
@@ -633,7 +705,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       }
     }
     refresh();
-    setInterval(refresh, 2000);
+    setInterval(refresh, 1000);
   </script>
 </body>
 </html>
@@ -646,7 +718,7 @@ void handleRoot()
 
 void handleDiag()
 {
-  String html = "<html><head><meta charset='utf-8'><meta http-equiv='refresh' content='5'>";
+  String html = "<html><head><meta charset='utf-8'><meta http-equiv='refresh' content='1'>";
   html += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
   html += "<style>";
   html += "body{--bg:#111;--panel:#1a1a1a;--panel2:#202020;--text:#ececec;--muted:#a8a8a8;--line:#333;--accent:#d6d6d6;--ok:#dcdcdc;--warn:#bdbdbd;--bad:#8d8d8d;margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text);padding:18px;}";
@@ -663,6 +735,7 @@ void handleDiag()
   html += "<div>Status: " + String(bms.online ? "ONLINE" : "OFFLINE") + " | Errors: " + String(bms.errorCount) + "</div>";
   html += "<div>Operating state: " + operatingStateText() + "</div>";
   html += "<div>Health: <span class='" + healthClass() + "'>" + healthText() + "</span></div>";
+  html += "<div>Flags: Status " + formatHex16(bms.status) + " | Warning " + formatHex16(bms.warning) + " | Protect " + formatHex16(bms.protect) + " | Cycles " + String(bms.cycles) + "</div>";
   html += "<div>Cell count: " + String(bms.cellCount ? bms.cellCount : 15) + "</div>";
   html += "<div>CRC rx: " + formatHex16(bms.crcReceived) + " | CRC calc: " + formatHex16(bms.crcCalculated) + "</div>";
   html += "<div><a href='/'>Back to dashboard</a></div>";
@@ -671,7 +744,9 @@ void handleDiag()
   html += "<div class='card'><h2>Raw registers</h2><div class='grid'>";
   for (uint8_t i = 0; i < bms.rawCount; i++)
   {
-    html += "<div class='cell'><div class='muted'>Reg 0x";
+    html += "<div class='cell'><div class='muted'>Field</div><div><strong>";
+    html += rawRegisterName(i);
+    html += "</strong></div><div class='muted'>Reg 0x";
     char idxBuf[8];
     snprintf(idxBuf, sizeof(idxBuf), "%04X", i);
     html += idxBuf;
