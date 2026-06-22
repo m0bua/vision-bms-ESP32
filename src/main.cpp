@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <WiFi.h>
 #include <WebServer.h>
 #include <driver/twai.h>
@@ -13,6 +14,7 @@
 
 constexpr uint8_t BMS_REG_COUNT = 0x24; // 0x0000..0x0023
 constexpr size_t BMS_RAW_REGS = BMS_REG_COUNT;
+constexpr size_t JSON_DOC_CAPACITY = 12288;
 
 struct BmsSnapshot
 {
@@ -222,16 +224,12 @@ const FlagName PROTECT_FLAGS[] = {
 String decodeBitmask(uint16_t mask, const FlagName *flags, size_t flagCount)
 {
   String out;
-  for (size_t i = 0; i < flagCount; i++)
-  {
-    if ((mask & flags[i].bit) == 0)
-      continue;
-    if (!out.isEmpty())
-      out += ", ";
+  for (size_t i = 0; i < flagCount; i++) {
+    if ((mask & flags[i].bit) == 0) continue;
+    if (!out.isEmpty()) out += ", ";
     out += flags[i].name;
   }
-  if (out.isEmpty())
-    out = "none";
+  if (out.isEmpty()) out = "none";
   return out;
 }
 
@@ -239,12 +237,9 @@ String activeFlagChips(uint16_t mask, const FlagName *flags, size_t flagCount, c
 {
   String out;
   bool hasAny = false;
-  for (size_t i = 0; i < flagCount; i++)
-  {
-    if ((mask & flags[i].bit) == 0)
-      continue;
-    if (!hasAny)
-    {
+  for (size_t i = 0; i < flagCount; i++) {
+    if ((mask & flags[i].bit) == 0) continue;
+    if (!hasAny) {
       out += "<div class='flag-group'><div class='flag-title'>Active bits</div>";
       hasAny = true;
     }
@@ -254,12 +249,10 @@ String activeFlagChips(uint16_t mask, const FlagName *flags, size_t flagCount, c
     out += flags[i].name;
     out += "</span>";
   }
-  if (!hasAny)
-  {
+  if (!hasAny) {
     out = "<div class='flag-group'><div class='flag-title'>Active bits</div><span class='tag tag-muted'>none</span></div>";
   }
-  else
-  {
+  else {
     out += "</div>";
   }
   return out;
@@ -276,8 +269,7 @@ String formatUptime()
   unsigned int seconds = sec % 60UL;
 
   String out;
-  if (days > 0)
-  {
+  if (days > 0) {
     out += String(days) + "d ";
   }
   out += String(hours) + "h ";
@@ -373,19 +365,15 @@ String protectFlagsText()
 
 String haStatusCategory()
 {
-  if (bms.protect != 0)
-    return "protected";
-  if (bms.warning != 0)
-    return "warning";
+  if (bms.protect != 0) return "protected";
+  if (bms.warning != 0) return "warning";
   return "status";
 }
 
 String haSubstatusText()
 {
-  if (bms.protect != 0)
-    return protectFlagsText();
-  if (bms.warning != 0)
-    return warningFlagsText();
+  if (bms.protect != 0) return protectFlagsText();
+  if (bms.warning != 0) return warningFlagsText();
   return statusFlagsText();
 }
 
@@ -636,122 +624,129 @@ void handleDiag()
   server.send(200, "text/html", buildDiagHtml());
 }
 
-void handleJson()
+void fillTelemetryJson(JsonObject root, bool haFormat)
 {
-  String json = "{";
-  json += "\"wifi\":{";
-  json += "\"connected\":" + String(wifiConnected() ? "true" : "false") + ",";
-  json += "\"ip\":\"" + String(wifiConnected() ? WiFi.localIP().toString() : String("n/a")) + "\"";
-  json += "},";
-  json += "\"uptime_ms\":" + String(millis()) + ",";
-  json += "\"online\":" + String(bms.online ? "true" : "false") + ",";
-  json += "\"errors\":" + String(bms.errorCount) + ",";
-  json += "\"active_slave_id\":" + String(bms.activeSlaveId) + ",";
-  json += "\"last_tried_slave_id\":" + String(bms.lastTriedSlaveId) + ",";
-  json += "\"can_enabled\":" + String(ENABLE_DEYE_CAN ? "true" : "false") + ",";
-  json += "\"mode\":\"" + String(ENABLE_DEYE_CAN ? "bms_can" : "bms_read") + "\",";
-  json += "\"mode_label\":\"" + String(ENABLE_DEYE_CAN ? "BMS + Deye CAN" : "BMS read only") + "\",";
-  json += "\"health_text\":\"" + healthText() + "\",";
-  json += "\"operating_text\":\"" + operatingStateText() + "\",";
-  json += "\"last_update_ms\":" + String(bms.lastUpdateMs) + ",";
-  json += "\"crc_received\":" + String(bms.crcReceived) + ",";
-  json += "\"crc_calculated\":" + String(bms.crcCalculated) + ",";
-  json += "\"pack_v\":" + String(bms.packV, 2) + ",";
-  json += "\"current_a\":" + String(bms.current, 2) + ",";
-  json += "\"soc\":" + String(bms.soc) + ",";
-  json += "\"soh\":" + String(bms.soh) + ",";
-  json += "\"env_temp\":" + String(bms.envTemp) + ",";
-  json += "\"max_cell_temp\":" + String(bms.maxCellTemp) + ",";
-  json += "\"remaining_ah\":" + String(bms.remainingAh) + ",";
-  json += "\"max_charge_current_limit\":" + String(bms.maxChargeCurrentLimit) + ",";
-  json += "\"status_category\":\"" + haStatusCategory() + "\",";
-  json += "\"substatus\":\"" + haSubstatusText() + "\",";
-  json += "\"status_raw\":" + String(bms.status) + ",";
-  json += "\"warning_raw\":" + String(bms.warning) + ",";
-  json += "\"protect_raw\":" + String(bms.protect) + ",";
-  json += "\"cycles\":" + String(bms.cycles) + ",";
-  json += "\"reserved_status\":" + String(bms.reservedStatus) + ",";
-  json += "\"cell_count\":" + String(bms.cellCount ? bms.cellCount : 15) + ",";
-  json += "\"cell_min_v\":" + String(bms.minCellV, 3) + ",";
-  json += "\"cell_avg_v\":" + String(bms.avgCellV, 3) + ",";
-  json += "\"cell_max_v\":" + String(bms.maxCellV, 3) + ",";
-  json += "\"cell_delta_v\":" + String(bms.cellDeltaV, 3) + ",";
-  for (int i = 0; i < 15; i++) {
-    json += "\"cell_" + String(i + 1) + "_mv\":" + String(bms.cellsV[i]) + ",";
-  }
-  json += "\"cell_voltages_mv\":[";
-  for (int i = 0; i < 15; i++) {
-    if (i > 0) {
-      json += ",";
+  if (!haFormat)
+  {
+    JsonObject wifi = root.createNestedObject("wifi");
+    wifi["connected"] = wifiConnected();
+    wifi["ip"] = wifiConnected() ? WiFi.localIP().toString() : "n/a";
+    root["uptime_ms"] = millis();
+    root["online"] = bms.online;
+    root["errors"] = bms.errorCount;
+    root["active_slave_id"] = bms.activeSlaveId;
+    root["last_tried_slave_id"] = bms.lastTriedSlaveId;
+    root["can_enabled"] = ENABLE_DEYE_CAN;
+    root["mode"] = ENABLE_DEYE_CAN ? "bms_can" : "bms_read";
+    root["mode_label"] = ENABLE_DEYE_CAN ? "BMS + Deye CAN" : "BMS read only";
+    root["health_text"] = healthText();
+    root["operating_text"] = operatingStateText();
+    root["last_update_ms"] = bms.lastUpdateMs;
+    root["crc_received"] = bms.crcReceived;
+    root["crc_calculated"] = bms.crcCalculated;
+    root["pack_v"] = bms.packV;
+    root["current_a"] = bms.current;
+    root["soc"] = bms.soc;
+    root["soh"] = bms.soh;
+    root["env_temp"] = bms.envTemp;
+    root["max_cell_temp"] = bms.maxCellTemp;
+    root["remaining_ah"] = bms.remainingAh;
+    root["max_charge_current_limit"] = bms.maxChargeCurrentLimit;
+    root["status_category"] = haStatusCategory();
+    root["substatus"] = haSubstatusText();
+    root["status_raw"] = bms.status;
+    root["warning_raw"] = bms.warning;
+    root["protect_raw"] = bms.protect;
+    root["cycles"] = bms.cycles;
+    root["reserved_status"] = bms.reservedStatus;
+    root["cell_count"] = bms.cellCount ? bms.cellCount : 15;
+    root["cell_min_v"] = bms.minCellV;
+    root["cell_avg_v"] = bms.avgCellV;
+    root["cell_max_v"] = bms.maxCellV;
+    root["cell_delta_v"] = bms.cellDeltaV;
+
+    JsonArray cellVoltages = root.createNestedArray("cell_voltages_mv");
+    JsonArray cells = root.createNestedArray("cells");
+    for (int i = 0; i < 15; i++)
+    {
+      root[String("cell_") + String(i + 1) + "_mv"] = bms.cellsV[i];
+      cellVoltages.add(bms.cellsV[i]);
+
+      JsonObject cell = cells.createNestedObject();
+      cell["index"] = i + 1;
+      cell["mv"] = bms.cellsV[i];
+      cell["v"] = bms.cellVolts[i];
     }
-    json += String(bms.cellsV[i]);
+
+    JsonArray rawRegs = root.createNestedArray("raw_regs");
+    for (uint8_t i = 0; i < bms.rawCount; i++)
+    {
+      rawRegs.add(bms.rawRegs[i]);
+    }
+    return;
   }
-  json += "],";
-  json += "\"cells\":[";
+
+  root["online"] = bms.online;
+  root["active_slave_id"] = bms.activeSlaveId;
+  root["health_text"] = healthText();
+  root["operating_text"] = operatingStateText();
+  root["status"] = haStatusCategory();
+  root["substatus"] = haSubstatusText();
+  root["status_raw"] = bms.status;
+  root["warning_raw"] = bms.warning;
+  root["protect_raw"] = bms.protect;
+  root["cell_count"] = bms.cellCount ? bms.cellCount : 15;
+  root["pack_voltage_v"] = bms.packV;
+  root["current_a"] = bms.current;
+  root["soc_pct"] = bms.soc;
+  root["soh_pct"] = bms.soh;
+  root["env_temp_c"] = bms.envTemp;
+  root["max_cell_temp_c"] = bms.maxCellTemp;
+  root["remaining_ah"] = bms.remainingAh;
+  root["max_charge_current_limit"] = bms.maxChargeCurrentLimit;
+  root["cell_min_v"] = bms.minCellV;
+  root["cell_avg_v"] = bms.avgCellV;
+  root["cell_max_v"] = bms.maxCellV;
+  root["cell_delta_v"] = bms.cellDeltaV;
+  root["warning_hex"] = formatHex16(bms.warning);
+  root["protect_hex"] = formatHex16(bms.protect);
+  root["status_hex"] = formatHex16(bms.status);
+  root["cycles"] = bms.cycles;
+  root["reserved_status"] = bms.reservedStatus;
+
   for (int i = 0; i < 15; i++)
   {
-    if (i > 0)
-      json += ",";
-    json += "{";
-    json += "\"index\":" + String(i + 1) + ",";
-    json += "\"mv\":" + String(bms.cellsV[i]) + ",";
-    json += "\"v\":" + String(bms.cellVolts[i], 3);
-    json += "}";
+    root[String("cell_") + String(i + 1) + "_mv"] = bms.cellsV[i];
   }
-  json += "],";
-  json += "\"raw_regs\":[";
-  for (uint8_t i = 0; i < bms.rawCount; i++)
+
+  JsonArray cellVoltages = root.createNestedArray("cell_voltages_mv");
+  for (int i = 0; i < 15; i++)
   {
-    if (i > 0)
-      json += ",";
-    json += String(bms.rawRegs[i]);
+    cellVoltages.add(bms.cellsV[i]);
   }
-  json += "]}";
+}
+
+void handleJson()
+{
+  DynamicJsonDocument doc(JSON_DOC_CAPACITY);
+  JsonObject root = doc.to<JsonObject>();
+  fillTelemetryJson(root, false);
+
+  String json;
+  json.reserve(measureJson(doc) + 1);
+  serializeJson(doc, json);
   server.send(200, "application/json", json);
 }
 
 void handleHaJson()
 {
-  String json = "{";
-  json += "\"online\":" + String(bms.online ? "true" : "false") + ",";
-  json += "\"active_slave_id\":" + String(bms.activeSlaveId) + ",";
-  json += "\"health_text\":\"" + healthText() + "\",";
-  json += "\"operating_text\":\"" + operatingStateText() + "\",";
-  json += "\"status\":\"" + haStatusCategory() + "\",";
-  json += "\"substatus\":\"" + haSubstatusText() + "\",";
-  json += "\"status_raw\":" + String(bms.status) + ",";
-  json += "\"warning_raw\":" + String(bms.warning) + ",";
-  json += "\"protect_raw\":" + String(bms.protect) + ",";
-  json += "\"cell_count\":" + String(bms.cellCount ? bms.cellCount : 15) + ",";
-  json += "\"pack_voltage_v\":" + String(bms.packV, 2) + ",";
-  json += "\"current_a\":" + String(bms.current, 2) + ",";
-  json += "\"soc_pct\":" + String(bms.soc) + ",";
-  json += "\"soh_pct\":" + String(bms.soh) + ",";
-  json += "\"env_temp_c\":" + String(bms.envTemp) + ",";
-  json += "\"max_cell_temp_c\":" + String(bms.maxCellTemp) + ",";
-  json += "\"remaining_ah\":" + String(bms.remainingAh) + ",";
-  json += "\"max_charge_current_limit\":" + String(bms.maxChargeCurrentLimit) + ",";
-  json += "\"cell_min_v\":" + String(bms.minCellV, 3) + ",";
-  json += "\"cell_avg_v\":" + String(bms.avgCellV, 3) + ",";
-  json += "\"cell_max_v\":" + String(bms.maxCellV, 3) + ",";
-  json += "\"cell_delta_v\":" + String(bms.cellDeltaV, 3) + ",";
-  json += "\"warning_hex\":\"" + formatHex16(bms.warning) + "\",";
-  json += "\"protect_hex\":\"" + formatHex16(bms.protect) + "\",";
-  json += "\"status_hex\":\"" + formatHex16(bms.status) + "\",";
-  json += "\"cycles\":" + String(bms.cycles) + ",";
-  json += "\"reserved_status\":" + String(bms.reservedStatus) + ",";
-  for (int i = 0; i < 15; i++)
-  {
-    json += "\"cell_" + String(i + 1) + "_mv\":" + String(bms.cellsV[i]) + ",";
-  }
-  json += "\"cell_voltages_mv\":[";
-  for (int i = 0; i < 15; i++)
-  {
-    if (i > 0)
-      json += ",";
-    json += String(bms.cellsV[i]);
-  }
-  json += "]}";
+  DynamicJsonDocument doc(JSON_DOC_CAPACITY);
+  JsonObject root = doc.to<JsonObject>();
+  fillTelemetryJson(root, true);
+
+  String json;
+  json.reserve(measureJson(doc) + 1);
+  serializeJson(doc, json);
   server.send(200, "application/json", json);
 }
 
@@ -789,22 +784,18 @@ void loop()
   static unsigned long lastLog = 0;
   static uint8_t scanId = PREFERRED_BMS_ID;
 
-  if (millis() - lastPoll >= 3000)
-  {
+  if (millis() - lastPoll >= 3000) {
     bool ok = requestBmsData(bms.online ? bms.activeSlaveId : scanId);
-    if (!ok && !bms.online)
-    {
+    if (!ok && !bms.online) {
       scanId++;
-      if (scanId > BMS_ID_MAX)
-      {
+      if (scanId > BMS_ID_MAX) {
         scanId = BMS_ID_MIN;
       }
     }
     lastPoll = millis();
   }
 
-  if (millis() - lastLog >= 3000)
-  {
+  if (millis() - lastLog >= 3000) {
     lastLog = millis();
     Serial.print("BMS ");
     Serial.print(bms.online ? "ONLINE" : "OFFLINE");
@@ -820,10 +811,7 @@ void loop()
     Serial.println(formatHex16(bms.crcCalculated));
   }
 
-  if (ENABLE_DEYE_CAN && bms.online)
-  {
-    sendDeyeCanTelemetry();
-  }
+  if (ENABLE_DEYE_CAN && bms.online) sendDeyeCanTelemetry();
 
   server.handleClient();
   delay(1);
