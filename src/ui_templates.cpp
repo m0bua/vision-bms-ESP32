@@ -265,11 +265,12 @@ __UI_SHARED_JS__
 )rawliteral";
 
 extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
-<html><head><meta charset='utf-8'><meta http-equiv='refresh' content='1'>
+<html><head><meta charset='utf-8'>__REFRESH_META__
 <meta name='viewport' content='width=device-width, initial-scale=1'>
 <style>
   __UI_SHARED_CSS__
   body{__UI_THEME_BASE_VARS____UI_THEME_CUSTOM_VARS__padding:18px}
+  body.clickable{cursor:pointer}
   .card{max-width:1200px;margin:0 auto 16px auto;padding:16px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
   .cell{padding:10px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);}
@@ -288,9 +289,10 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   .tag-warn{background:#3d3415;color:#fff2ba;border-color:#7f6a20;}
   .tag-protect{background:#3c1818;color:#ffd0d0;border-color:#7f2e2e;}
   .soft{color:var(--muted);}
-</style></head><body>
+</style></head><body data-refresh-seconds='__REFRESH_SECONDS__'>
 <div class='card'>
   <h1>Diagnostics</h1>
+  <div class='soft'>Auto refresh: __REFRESH_STATE__ | click anywhere to __REFRESH_ACTION__</div>
   <div><a href='/'>Back to dashboard</a></div><br>
   <div>Active ID: __ACTIVE_ID__ | Last tried: __LAST_TRIED__</div>
   <div>Status: __ONLINE__ | Errors: __ERRORS__</div>
@@ -304,5 +306,22 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   <div>CRC rx: __CRC_RX__ | CRC calc: __CRC_CALC__</div>
 </div>
 __RAW_REGS__
+<script>
+  const refreshSeconds = Number(document.body.dataset.refreshSeconds || 0);
+  const toggleRefresh = () => {
+    const url = new URL(window.location.href);
+    if (refreshSeconds > 0) {
+      url.searchParams.delete('upd');
+    } else {
+      url.searchParams.set('upd', '1');
+    }
+    window.location.href = url.toString();
+  };
+  document.body.classList.add('clickable');
+  document.body.addEventListener('click', (event) => {
+    if (event.target.closest('a, button, input, textarea, select, label')) return;
+    toggleRefresh();
+  });
+</script>
 </body></html>
 )rawliteral";

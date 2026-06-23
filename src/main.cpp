@@ -596,12 +596,16 @@ void handleRoot()
   server.send(200, "text/html", html);
 }
 
-String buildDiagHtml()
+String buildDiagHtml(uint16_t refreshSeconds)
 {
   String html = FPSTR(DIAG_HTML);
   html.replace("__UI_THEME_BASE_VARS__", String(FPSTR(UI_THEME_BASE_VARS)));
   html.replace("__UI_THEME_CUSTOM_VARS__", String(FPSTR(UI_THEME_CUSTOM_VARS)));
   html.replace("__UI_SHARED_CSS__", String(FPSTR(UI_SHARED_CSS)));
+  html.replace("__REFRESH_META__", refreshSeconds > 0 ? String("<meta http-equiv='refresh' content='") + String(refreshSeconds) + "'>" : "");
+  html.replace("__REFRESH_SECONDS__", String(refreshSeconds));
+  html.replace("__REFRESH_STATE__", refreshSeconds > 0 ? String("on (") + String(refreshSeconds) + " s)" : "off");
+  html.replace("__REFRESH_ACTION__", refreshSeconds > 0 ? "disable" : "enable");
   html.replace("__ACTIVE_ID__", String(bms.activeSlaveId));
   html.replace("__LAST_TRIED__", String(bms.lastTriedSlaveId));
   html.replace("__ONLINE__", String(bms.online ? "ONLINE" : "OFFLINE"));
@@ -625,7 +629,14 @@ String buildDiagHtml()
 
 void handleDiag()
 {
-  server.send(200, "text/html", buildDiagHtml());
+  uint16_t refreshSeconds = 0;
+  if (server.hasArg("upd"))
+  {
+    int requested = server.arg("upd").toInt();
+    if (requested > 0)
+      refreshSeconds = (uint16_t)requested;
+  }
+  server.send(200, "text/html", buildDiagHtml(refreshSeconds));
 }
 
 void fillTelemetryJson(JsonObject root)
