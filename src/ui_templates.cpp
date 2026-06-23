@@ -148,12 +148,12 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
             <div class="label" style="text-align:right"><strong id="remainingAh">-</strong>Ah</div>
           </div>
         </div>
-        <div class="row" style="margin-top:12px">
+        <div class="row" style="margin-top:12px;font-size:1.5em;">
           <div>
             <div class="muted">Status: <strong id="healthText">-</strong></div>
           </div>
         </div>
-        <div class="row" style="margin-top:12px">
+        <div class="row" style="margin-top:12px;font-size:1.3em;">
           <div><span class="muted">Voltage:</span> <strong id="packV">-</strong></div>
           <div><span class="muted">Current:</span> <strong id="currentA">-</strong></div>
         </div>
@@ -273,6 +273,13 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   .card{max-width:1200px;margin:0 auto 16px auto;padding:16px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
   .cell{padding:10px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);}
+  .reg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:12px}
+  .reg-card{padding:12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line)}
+  .reg-line{line-height:1.35}
+  .reg-addr,.reg-hex,.reg-dec{word-break:break-all}
+  .reg-addr,.reg-hex{font-family:monospace;color:var(--muted);font-size:12px}
+  .reg-name{font-size:14px;font-weight:700;margin:4px 0;color:var(--text)}
+  .reg-dec{font-size:12px;color:var(--muted)}
   .flag-group{margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#151515;}
   .flag-title{color:var(--muted);font-size:11px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;}
   .tag{display:inline-block;margin:0 6px 6px 0;padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid transparent;}

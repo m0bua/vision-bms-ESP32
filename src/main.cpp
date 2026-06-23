@@ -167,6 +167,8 @@ const char *rawRegisterName(uint8_t index)
     return "SOH";
   case 0x18:
     return "SOC";
+  case 0x19:
+    return "reserved status";
   case 0x1A:
     return "cycles";
   case 0x1B:
@@ -177,16 +179,6 @@ const char *rawRegisterName(uint8_t index)
     return "protect";
   case 0x1E:
     return "cell count";
-  case 0x1F:
-    return "aux cfg 1";
-  case 0x20:
-    return "aux cfg 2";
-  case 0x21:
-    return "aux cfg 3";
-  case 0x22:
-    return "aux cfg 4";
-  case 0x23:
-    return "aux cfg 5";
   default:
     return "reserved";
   }
@@ -379,21 +371,24 @@ String statusDetailText()
 String buildDiagRawRegistersHtml()
 {
   String html;
-  html.reserve(64 + bms.rawCount * 140);
-  html += "<div class='card'><h2>Raw registers</h2><div class='grid'>";
+  html.reserve(96 + bms.rawCount * 160);
+  html += "<div class='card'><h2 style='margin:0'>Raw registers</h2><div class='reg-grid'>";
   for (uint8_t i = 0; i < bms.rawCount; i++)
   {
-    html += "<div class='cell'><div class='muted'>Field</div><div><strong>";
-    html += rawRegisterName(i);
-    html += "</strong></div><div class='muted'>Reg 0x";
-    char idxBuf[8];
-    snprintf(idxBuf, sizeof(idxBuf), "%04X", i);
-    html += idxBuf;
-    html += "</div><div><strong>";
+    html += "<div class='reg-card'>";
+    html += "<div class='reg-line reg-addr'>";
+    html += formatHex16(i);
+    html += "</div>";
+    html += "<div class='reg-line reg-hex'>";
     html += formatHex16(bms.rawRegs[i]);
-    html += "</strong></div><div class='muted'>";
+    html += "</div>";
+    html += "<div class='reg-line reg-name'>";
+    html += rawRegisterName(i);
+    html += "</div>";
+    html += "<div class='reg-line reg-dec'>";
     html += String(bms.rawRegs[i]);
-    html += "</div></div>";
+    html += "</div>";
+    html += "</div>";
   }
   html += "</div></div>";
   return html;
