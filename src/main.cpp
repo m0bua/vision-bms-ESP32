@@ -174,8 +174,6 @@ const char *rawRegisterName(uint8_t index)
     return "SOH";
   case 0x18:
     return "SOC";
-  case 0x19:
-    return "reserved status";
   case 0x1A:
     return "cycles";
   case 0x1B:
@@ -187,7 +185,7 @@ const char *rawRegisterName(uint8_t index)
   case 0x1E:
     return "cell count";
   default:
-    return "reserved";
+    return "unknown";
   }
 }
 

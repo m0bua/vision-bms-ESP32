@@ -277,7 +277,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   .reg-card{padding:12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line)}
   .reg-line{line-height:1.35}
   .reg-addr,.reg-hex,.reg-dec{word-break:break-all}
-  .reg-addr,.reg-hex{font-family:monospace;color:var(--muted);font-size:12px;display:inline-block}
+  .reg-addr,.reg-hex{font-family:monospace;color:var(--muted);font-size:12px;display:inline-block;margin-right:1em;}
   .reg-name{font-size:14px;font-weight:700;margin:4px 0;color:var(--text)}
   .reg-dec{font-size:12px;color:var(--muted)}
   .flag-group{margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#151515;}
