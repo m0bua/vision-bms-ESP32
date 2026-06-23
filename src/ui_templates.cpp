@@ -34,6 +34,14 @@ extern const char UI_SHARED_JS[] PROGMEM = R"rawliteral(
   const hex16 = (n) => '0x' + (n >>> 0).toString(16).toUpperCase().padStart(4, '0');
   const fmt = (v, d = 0) => Number(v).toFixed(d);
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+  const formatUptime = (totalSeconds) => {
+    const sec = Math.max(0, Math.floor(Number(totalSeconds || 0)));
+    const days = Math.floor(sec / 86400);
+    const hours = Math.floor((sec % 86400) / 3600);
+    const minutes = Math.floor((sec % 3600) / 60);
+    const seconds = sec % 60;
+    return days + 'd ' + hours + 'h ' + minutes + 'm ' + seconds + 's';
+  };
   const setText = (id, val) => {
     const el = byId(id);
     if (el) el.textContent = val;
@@ -42,46 +50,26 @@ extern const char UI_SHARED_JS[] PROGMEM = R"rawliteral(
     return online ? { text: 'ONLINE', cls: 'ok' } : { text: 'OFFLINE', cls: 'bad' };
   }
   function deriveOperatingText(data) {
-    if (!data.online) return 'Offline';
-    const currentA = Number(data.current_a || 0);
-    const soc = Number(data.soc || 0);
-    const warning = Number(data.warning_raw || 0);
-    const protect = Number(data.protect_raw || 0);
-    const status = Number(data.status_raw || 0);
-    if (warning === 2 && protect === 4096 && status === 0 && Math.abs(currentA) < 0.5 && soc >= 95) return 'Standby';
+    const status = data.status || {};
+    const pack = data.pack || {};
+    const raw = status.raw || {};
+    if (!status.online) return 'Offline';
+    const currentA = Number(pack.current_a || 0);
+    const soc = Number(pack.soc_pct || 0);
+    const warning = Number(raw.warning || 0);
+    const protect = Number(raw.protect || 0);
+    const statusBits = Number(raw.status || 0);
+    if (warning === 2 && protect === 4096 && statusBits === 0 && Math.abs(currentA) < 0.5 && soc >= 95) return 'Standby';
     if (currentA > 0.05) return 'Charging';
     if (currentA < -0.05) return 'Discharging';
-    return data.operating_text || data.health_text || '-';
+    return status.text || status.operating_text || status.health_text || '-';
   }
   function extractCellSlots(data) {
     const cells = [];
-    if (Array.isArray(data.cells) && data.cells.length) {
-      data.cells.forEach((cell, index) => {
-        if (typeof cell === 'number') {
-          cells.push({ index: index + 1, mv: Number(cell || 0) });
-          return;
-        }
-        if (cell && typeof cell === 'object') {
-          if (cell.mv != null) {
-            cells.push({ index: Number(cell.index || index + 1), mv: Number(cell.mv || 0) });
-            return;
-          }
-          if (cell.v != null) {
-            cells.push({ index: Number(cell.index || index + 1), mv: Number(cell.v || 0) * 1000 });
-            return;
-          }
-        }
-        cells.push({ index: index + 1, mv: 0 });
+    if (data.cells && Array.isArray(data.cells.voltages_v)) {
+      data.cells.voltages_v.forEach((v, index) => {
+        cells.push({ index: index + 1, v: Number(v || 0) });
       });
-    } else if (Array.isArray(data.cell_voltages_mv) && data.cell_voltages_mv.length) {
-      data.cell_voltages_mv.forEach((mv, index) => cells.push({ index: index + 1, mv: Number(mv || 0) }));
-    } else if (Array.isArray(data.raw_regs) && data.raw_regs.length >= 18) {
-      data.raw_regs.slice(2, 18).forEach((reg, index) => cells.push({ index: index + 1, mv: Number(reg || 0) }));
-    } else {
-      for (let i = 1; i <= 16; i++) {
-        const key = 'cell_' + i + '_mv';
-        if (data[key] != null) cells.push({ index: i, mv: Number(data[key] || 0) });
-      }
     }
     return cells;
   }
@@ -124,10 +112,10 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
     .fill.low{background:var(--fill-low)}
     .fill.mid{background:var(--fill-mid)}
     .fill.high{background:var(--fill-high)}
-    @media (max-width:1100px){.grid-cells{grid-template-columns:repeat(4,minmax(0,1fr))}}
-    @media (max-width:900px){.half{grid-column:span 12}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.grid-cells{grid-template-columns:repeat(3,minmax(0,1fr))}}
-    @media (max-width:650px){.grid-cells{grid-template-columns:repeat(2,minmax(0,1fr))}}
-    @media (max-width:560px){.hero{flex-direction:column;align-items:flex-start}.stats{grid-template-columns:1fr}.grid-cells{grid-template-columns:1fr}}
+    @media (max-width:1100px){.grid-cells{grid-template-columns:repeat(3,minmax(0,1fr))}}
+    @media (max-width:900px){.half{grid-column:span 12}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.grid-cells{grid-template-columns:repeat(5,minmax(0,1fr))}}
+    @media (max-width:650px){.grid-cells{grid-template-columns:repeat(3,minmax(0,1fr))}}
+    @media (max-width:560px){.hero{flex-direction:column;align-items:flex-start}.stats{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -152,45 +140,37 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
       <div class="card half">
         <div class="row">
           <div>
-            <div class="label">Status</div>
-            <div class="value" id="statusText">-</div>
-            <div class="muted" style="margin-top:4px">Substatus: <strong id="substatusText">-</strong></div>
+            <div class="value" id="statusText" style="margin-right:30px">-</div>
           </div>
           <div style="min-width:220px;flex:1">
-            <div class="label">SOC</div>
+            <div class="label" style="text-align:right">SOC: <strong id="socText">-</strong></div>
             <div class="bar"><div class="fill" id="socBar" style="width:0%"></div></div>
-            <div class="muted" id="socText" style="margin-top:6px">-</div>
+            <div class="label" style="text-align:right"><strong id="remainingAh">-</strong>Ah</div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <div>
+            <div class="muted">Status: <strong id="healthText">-</strong></div>
           </div>
         </div>
         <div class="row" style="margin-top:12px">
           <div><span class="muted">Voltage:</span> <strong id="packV">-</strong></div>
           <div><span class="muted">Current:</span> <strong id="currentA">-</strong></div>
+        </div>
+        <div class="row" style="margin-top:12px">
           <div><span class="muted">SOH:</span> <strong id="soh">-</strong></div>
+          <div><span class="muted">Cell count:</span> <strong id="cellCount">-</strong></div>
         </div>
         <div class="row" style="margin-top:12px">
-          <div><span class="muted">Temp 1:</span> <strong id="temp1">-</strong></div>
-          <div><span class="muted">Temp 2:</span> <strong id="temp2">-</strong></div>
-          <div><span class="muted">Temp 3:</span> <strong id="temp3">-</strong></div>
+          <div><span class="muted">PCB:</span> <strong id="pcbTemp">-</strong></div>
+          <div><span class="muted">Cell min:</span> <strong id="cellMinTemp">-</strong></div>
+          <div><span class="muted">Cell max:</span> <strong id="cellMaxTemp">-</strong></div>
         </div>
-        <div class="row" style="margin-top:12px">
-          <div><span class="muted">Remaining Ah:</span> <strong id="remainingAh">-</strong></div>
-        </div>
-        <div class="row">
-          <div><span class="muted">BMS ID:</span> <strong id="slaveId">-</strong></div>
-          <div><span class="muted">last tried:</span> <strong id="scanId">-</strong></div>
-        </div>
-        <div style="margin-top:12px">
-          <div class="label">Cell summary</div>
-          <div class="row" style="margin-top:10px">
-            <div><span class="muted">Cell count:</span> <strong id="cellCount">-</strong></div>
-            <div><span class="muted">State:</span> <strong id="healthText">-</strong></div>
-          </div>
-          <div class="row" style="margin-top:8px">
-            <div><span class="muted">Min:</span> <strong id="cellMin">-</strong></div>
-            <div><span class="muted">Avg:</span> <strong id="cellAvg">-</strong></div>
-            <div><span class="muted">Max:</span> <strong id="cellMax">-</strong></div>
-            <div><span class="muted">Delta:</span> <strong id="cellDelta">-</strong></div>
-          </div>
+        <div class="row" style="margin-top:8px">
+          <div><span class="muted">Min:</span> <strong id="cellMin">-</strong></div>
+          <div><span class="muted">Avg:</span> <strong id="cellAvg">-</strong></div>
+          <div><span class="muted">Max:</span> <strong id="cellMax">-</strong></div>
+          <div><span class="muted">Delta:</span> <strong id="cellDelta">-</strong></div>
         </div>
       </div>
 
@@ -203,7 +183,6 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
         <div class="row" style="justify-content:space-between">
           <div class="label">Links</div>
           <div class="row">
-            <a href="/ha">HA</a>
             <a href="/json">JSON</a>
             <a href="/diag">Diagnostic</a>
           </div>
@@ -213,17 +192,17 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
   </div>
   <script>
 __UI_SHARED_JS__
-    function renderCells(data, minMv, maxMv) {
+    function renderCells(data, minV, maxV) {
       const grid = byId('cellGrid');
       grid.innerHTML = '';
-      const slots = extractCellSlots(data);
-      slots.forEach((slot) => {
-        if (!slot.mv) return;
-        const v = (slot.mv / 1000).toFixed(3);
+      const cellSlots = extractCellSlots(data);
+      cellSlots.forEach((slot) => {
+        if (slot.v == null || slot.v <= 0) return;
+        const v = Number(slot.v).toFixed(3);
         const el = document.createElement('div');
         el.className = 'cell';
-        if (slot.mv === minMv) el.classList.add('low');
-        if (slot.mv === maxMv) el.classList.add('high');
+        if (Math.abs(slot.v - minV) < 0.0005) el.classList.add('low');
+        if (Math.abs(slot.v - maxV) < 0.0005) el.classList.add('high');
         el.innerHTML = '<div class="a">Cell ' + slot.index + '</div>' +
                        '<div class="v">' + v + ' V</div>';
         grid.appendChild(el);
@@ -233,43 +212,46 @@ __UI_SHARED_JS__
       try {
         const res = await fetch('/json', { cache: 'no-store' });
         const data = await res.json();
+        const system = data.system || {};
+        const status = data.status || {};
+        const pack = data.pack || {};
+        const temperatures = data.temperatures || {};
+        const limits = data.limits || {};
+        const cells = data.cells || {};
+        const diagnostics = data.diagnostics || {};
+        const crc = diagnostics.crc || {};
         setText('pollState', 'live');
         byId('pollState').className = 'pill live';
-        setText('wifiState', data.wifi.connected ? 'connected' : 'disconnected');
-        byId('wifiState').className = 'value ' + (data.wifi.connected ? 'ok' : 'bad');
-        setText('wifiIp', 'IP: ' + data.wifi.ip);
-        setText('uptime', Math.floor(data.uptime_ms / 1000) + ' s');
-        setText('lastUpdate', data.last_update_ms ? ('last update: ' + Math.floor((data.uptime_ms - data.last_update_ms) / 1000) + ' s ago') : 'no data yet');
-        setText('slaveId', data.active_slave_id || '-');
-        setText('scanId', 'last tried: ' + (data.last_tried_slave_id || '-'));
-        setText('errors', data.errors);
-        setText('crc', 'CRC rx ' + hex16(data.crc_received || 0) + ' / calc ' + hex16(data.crc_calculated || 0));
-        setText('mode', data.mode_label || data.mode || '-');
-        setText('canEnabled', 'CAN: ' + (data.can_enabled ? 'enabled' : 'disabled'));
-        const s = badgeForOnline(data.online);
+        setText('wifiState', system.wifi.connected ? 'connected' : 'disconnected');
+        byId('wifiState').className = 'value ' + (system.wifi.connected ? 'ok' : 'bad');
+        setText('wifiIp', 'IP: ' + system.wifi.ip);
+        setText('uptime', formatUptime(system.uptime_ms / 1000));
+        setText('lastUpdate', system.last_update_ms ? ('last update: ' + Math.floor((system.uptime_ms - system.last_update_ms) / 1000) + ' s ago') : 'no data yet');
+        setText('errors', system.errors);
+        setText('crc', 'CRC rx ' + hex16(crc.received || 0) + ' / calc ' + hex16(crc.calculated || 0));
+        const s = badgeForOnline(status.online);
         setText('statusText', s.text);
         byId('statusText').className = 'value ' + s.cls;
-        setText('substatusText', data.substatus || '-');
-        setText('packV', fmt(data.pack_v || 0, 2) + ' V');
-        setText('currentA', fmt(data.current_a || 0, 2) + ' A');
-        setText('soh', (data.soh ?? '-') + '%');
-        setText('temp1', (data.temp_1_c ?? '-') + ' C');
-        setText('temp2', (data.temp_2_c ?? '-') + ' C');
-        setText('temp3', (data.temp_3_c ?? '-') + ' C');
-        setText('remainingAh', data.remaining_ah ?? '-');
-        setText('cellMin', fmt(data.cell_min_v || 0, 3) + ' V');
-        setText('cellAvg', fmt(data.cell_avg_v || 0, 3) + ' V');
-        setText('cellMax', fmt(data.cell_max_v || 0, 3) + ' V');
-        setText('cellDelta', fmt(data.cell_delta_v || 0, 3) + ' V');
-        setText('healthText', deriveOperatingText(data));
-        const mvList = extractCellSlots(data);
-        const cellCount = Number(data.cell_count || mvList.filter((slot) => slot.mv).length || 0);
+        setText('healthText', status.text || '-');
+        setText('packV', fmt(pack.voltage_v || 0, 2) + ' V');
+        setText('currentA', fmt(pack.current_a || 0, 2) + ' A');
+        setText('soh', (pack.soh_pct ?? '-') + '%');
+        setText('pcbTemp', (temperatures.pcb_c ?? '-') + ' C');
+        setText('cellMinTemp', (temperatures.cell_min_c ?? '-') + ' C');
+        setText('cellMaxTemp', (temperatures.cell_max_c ?? '-') + ' C');
+        setText('remainingAh', limits.remaining_ah ?? '-');
+        setText('cellMin', fmt(cells.min_v || 0, 3) + ' V');
+        setText('cellAvg', fmt(cells.avg_v || 0, 3) + ' V');
+        setText('cellMax', fmt(cells.max_v || 0, 3) + ' V');
+        setText('cellDelta', fmt(cells.delta_v || 0, 3) + ' V');
+        const cellSlots = extractCellSlots(data);
+        const cellCount = Number(cells.count || cellSlots.length || 0);
         setText('cellCount', cellCount > 0 ? String(cellCount) : '-');
-        const soc = clamp(Number(data.soc || 0), 0, 100);
+        const soc = clamp(Number(pack.soc_pct || 0), 0, 100);
         byId('socBar').style.width = soc + '%';
         byId('socBar').className = 'fill ' + (soc < 20 ? 'low' : soc < 80 ? 'mid' : 'high');
         setText('socText', soc + '%');
-        renderCells(data, Math.round((data.cell_min_v || 0) * 1000), Math.round((data.cell_max_v || 0) * 1000));
+        renderCells(data, Number(cells.min_v || 0), Number(cells.max_v || 0));
       } catch (e) {
         setText('pollState', 'offline');
         byId('pollState').className = 'pill offline';
@@ -301,17 +283,17 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   .soft{color:var(--muted);}
 </style></head><body>
 <div class='card'><h1>Diagnostics</h1>
+<div><a href='/'>Back to dashboard</a></div>
 <div>Active ID: __ACTIVE_ID__ | Last tried: __LAST_TRIED__</div>
 <div>Status: __ONLINE__ | Errors: __ERRORS__</div>
 <div>Operating state: __OPERATING__</div>
 <div>Health: <span class='__HEALTH_CLASS__'>__HEALTH_TEXT__</span></div>
-<div>Status: __STATUS_HEX__ <span class='muted'>(__STATUS_TEXT__)</span>__STATUS_CHIPS__</div>
-<div>Warning: __WARNING_HEX__ <span class='muted'>(__WARNING_TEXT__)</span>__WARNING_CHIPS__</div>
-<div>Protect: __PROTECT_HEX__ <span class='muted'>(__PROTECT_TEXT__)</span>__PROTECT_CHIPS__</div>
+<div>Status: __STATUS_HEX__ <span class='muted'>(__STATUS_TEXT__)</span></div>
+<div>Warning: __WARNING_HEX__ <span class='muted'>(__WARNING_TEXT__)</span></div>
+<div>Protect: __PROTECT_HEX__ <span class='muted'>(__PROTECT_TEXT__)</span></div>
 <div>Cycles: __CYCLES__</div>
 <div>Cell count: __CELL_COUNT__</div>
 <div>CRC rx: __CRC_RX__ | CRC calc: __CRC_CALC__</div>
-<div><a href='/'>Back to dashboard</a></div>
 </div>
 __RAW_REGS__
 </body></html>

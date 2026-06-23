@@ -39,7 +39,6 @@ struct BmsSnapshot
   uint16_t cycles = 0;
   uint16_t reservedStatus = 0;
   uint16_t cellCount = 0;
-  uint16_t cellsV[16] = {0};
   float cellVolts[16] = {0.0f};
   float minCellV = 0.0f;
   float maxCellV = 0.0f;
@@ -97,6 +96,16 @@ static inline uint16_t readReg16(const uint8_t *frame, uint8_t regIndex)
   return ((uint16_t)frame[bytePos] << 8) | frame[bytePos + 1];
 }
 
+static inline float roundTo2(float value)
+{
+  return roundf(value * 100.0f) / 100.0f;
+}
+
+static inline float roundTo3(float value)
+{
+  return roundf(value * 1000.0f) / 1000.0f;
+}
+
 String formatHex16(uint16_t value)
 {
   char buf[8];
@@ -145,11 +154,11 @@ const char *rawRegisterName(uint8_t index)
   case 0x11:
     return "cell 16";
   case 0x12:
-    return "temp 1";
+    return "temp pcb";
   case 0x13:
-    return "temp 2";
+    return "temp min";
   case 0x14:
-    return "temp 3";
+    return "temp max";
   case 0x15:
     return "remaining Ah";
   case 0x16:
@@ -190,9 +199,9 @@ struct FlagName
 };
 
 const FlagName STATUS_FLAGS[] = {
-    {0x0001, "Discharge FET"},
-    {0x0002, "Charge FET"},
-    {0x1000, "Standby / extra bit"},
+    {0x0001, "Discharge"},
+    {0x0002, "Charge"},
+    {0x1000, "Standby"},
 };
 
 const FlagName WARNING_FLAGS[] = {
@@ -230,37 +239,16 @@ const FlagName PROTECT_FLAGS[] = {
 String decodeBitmask(uint16_t mask, const FlagName *flags, size_t flagCount)
 {
   String out;
-  for (size_t i = 0; i < flagCount; i++) {
-    if ((mask & flags[i].bit) == 0) continue;
-    if (!out.isEmpty()) out += ", ";
+  for (size_t i = 0; i < flagCount; i++)
+  {
+    if ((mask & flags[i].bit) == 0)
+      continue;
+    if (!out.isEmpty())
+      out += ", ";
     out += flags[i].name;
   }
-  if (out.isEmpty()) out = "none";
-  return out;
-}
-
-String activeFlagChips(uint16_t mask, const FlagName *flags, size_t flagCount, const char *chipClass)
-{
-  String out;
-  bool hasAny = false;
-  for (size_t i = 0; i < flagCount; i++) {
-    if ((mask & flags[i].bit) == 0) continue;
-    if (!hasAny) {
-      out += "<div class='flag-group'><div class='flag-title'>Active bits</div>";
-      hasAny = true;
-    }
-    out += "<span class='tag ";
-    out += chipClass;
-    out += "'>";
-    out += flags[i].name;
-    out += "</span>";
-  }
-  if (!hasAny) {
-    out = "<div class='flag-group'><div class='flag-title'>Active bits</div><span class='tag tag-muted'>none</span></div>";
-  }
-  else {
-    out += "</div>";
-  }
+  if (out.isEmpty())
+    out = "none";
   return out;
 }
 
@@ -275,7 +263,8 @@ String formatUptime()
   unsigned int seconds = sec % 60UL;
 
   String out;
-  if (days > 0) {
+  if (days > 0)
+  {
     out += String(days) + "d ";
   }
   out += String(hours) + "h ";
@@ -371,15 +360,19 @@ String protectFlagsText()
 
 String haStatusCategory()
 {
-  if (bms.protect != 0) return "protected";
-  if (bms.warning != 0) return "warning";
+  if (bms.protect != 0)
+    return "protected";
+  if (bms.warning != 0)
+    return "warning";
   return "status";
 }
 
-String haSubstatusText()
+String statusDetailText()
 {
-  if (bms.protect != 0) return protectFlagsText();
-  if (bms.warning != 0) return warningFlagsText();
+  if (bms.protect != 0)
+    return "Protected (" + protectFlagsText() + ")";
+  if (bms.warning != 0)
+    return "Warning (" + warningFlagsText() + ")";
   return statusFlagsText();
 }
 
@@ -388,7 +381,6 @@ String buildDiagRawRegistersHtml()
   String html;
   html.reserve(64 + bms.rawCount * 140);
   html += "<div class='card'><h2>Raw registers</h2><div class='grid'>";
-  html += "<div class='muted' style='margin-bottom:10px'>0x1F..0x23 look like auxiliary/config fields on this pack, not temperatures.</div>";
   for (uint8_t i = 0; i < bms.rawCount; i++)
   {
     html += "<div class='cell'><div class='muted'>Field</div><div><strong>";
@@ -420,18 +412,19 @@ void clearSnapshotData()
 
 void decodeSnapshot()
 {
-  bms.packV = bms.rawRegs[0] / 100.0f;
-  bms.current = (int16_t)bms.rawRegs[1] / 100.0f;
+  bms.packV = roundTo2(bms.rawRegs[0] / 100.0f);
+  bms.current = roundTo2((int16_t)bms.rawRegs[1] / 100.0f);
 
   float minCell = 1000.0f;
   float maxCell = 0.0f;
   float sumCell = 0.0f;
+  uint16_t validCells = 0;
   for (int i = 0; i < 16; i++)
   {
-    bms.cellsV[i] = bms.rawRegs[2 + i];
-    bms.cellVolts[i] = bms.cellsV[i] / 1000.0f;
+    bms.cellVolts[i] = roundTo3(bms.rawRegs[2 + i] / 1000.0f);
     if (bms.cellVolts[i] > 0.0f)
     {
+      validCells++;
       if (bms.cellVolts[i] < minCell)
         minCell = bms.cellVolts[i];
       if (bms.cellVolts[i] > maxCell)
@@ -441,10 +434,10 @@ void decodeSnapshot()
   }
   if (minCell == 1000.0f)
     minCell = 0.0f;
-  bms.minCellV = minCell;
-  bms.maxCellV = maxCell;
-  bms.avgCellV = sumCell / 15.0f;
-  bms.cellDeltaV = maxCell - minCell;
+  bms.minCellV = roundTo3(minCell);
+  bms.maxCellV = roundTo3(maxCell);
+  bms.avgCellV = roundTo3(validCells > 0 ? (sumCell / validCells) : 0.0f);
+  bms.cellDeltaV = roundTo3(maxCell - minCell);
 
   bms.envTemp = (int16_t)bms.rawRegs[0x12];
   bms.maxCellTemp = (int16_t)bms.rawRegs[0x13];
@@ -618,13 +611,10 @@ String buildDiagHtml()
   html.replace("__HEALTH_TEXT__", healthText());
   html.replace("__STATUS_HEX__", formatHex16(bms.status));
   html.replace("__STATUS_TEXT__", statusFlagsText());
-  html.replace("__STATUS_CHIPS__", activeFlagChips(bms.status, STATUS_FLAGS, sizeof(STATUS_FLAGS) / sizeof(STATUS_FLAGS[0]), "tag-status"));
   html.replace("__WARNING_HEX__", formatHex16(bms.warning));
   html.replace("__WARNING_TEXT__", warningFlagsText());
-  html.replace("__WARNING_CHIPS__", activeFlagChips(bms.warning, WARNING_FLAGS, sizeof(WARNING_FLAGS) / sizeof(WARNING_FLAGS[0]), "tag-warn"));
   html.replace("__PROTECT_HEX__", formatHex16(bms.protect));
   html.replace("__PROTECT_TEXT__", protectFlagsText());
-  html.replace("__PROTECT_CHIPS__", activeFlagChips(bms.protect, PROTECT_FLAGS, sizeof(PROTECT_FLAGS) / sizeof(PROTECT_FLAGS[0]), "tag-protect"));
   html.replace("__CYCLES__", String(bms.cycles));
   html.replace("__CELL_COUNT__", String(bms.cellCount ? bms.cellCount : 15));
   html.replace("__CRC_RX__", formatHex16(bms.crcReceived));
@@ -638,107 +628,70 @@ void handleDiag()
   server.send(200, "text/html", buildDiagHtml());
 }
 
-void fillTelemetryJson(JsonObject root, bool haFormat)
+void fillTelemetryJson(JsonObject root)
 {
-  if (!haFormat)
-  {
-    JsonObject wifi = root.createNestedObject("wifi");
-    wifi["connected"] = wifiConnected();
-    wifi["ip"] = wifiConnected() ? WiFi.localIP().toString() : "n/a";
-    root["uptime_ms"] = millis();
-    root["online"] = bms.online;
-    root["errors"] = bms.errorCount;
-    root["active_slave_id"] = bms.activeSlaveId;
-    root["last_tried_slave_id"] = bms.lastTriedSlaveId;
-    root["can_enabled"] = ENABLE_DEYE_CAN;
-    root["mode"] = ENABLE_DEYE_CAN ? "bms_can" : "bms_read";
-    root["mode_label"] = ENABLE_DEYE_CAN ? "BMS + Deye CAN" : "BMS read only";
-    root["health_text"] = healthText();
-    root["operating_text"] = operatingStateText();
-    root["last_update_ms"] = bms.lastUpdateMs;
-    root["crc_received"] = bms.crcReceived;
-    root["crc_calculated"] = bms.crcCalculated;
-    root["pack_v"] = bms.packV;
-    root["current_a"] = bms.current;
-    root["soc"] = bms.soc;
-    root["soh"] = bms.soh;
-    root["temp_1_c"] = bms.envTemp;
-    root["temp_2_c"] = bms.maxCellTemp;
-    root["temp_3_c"] = bms.tempPCB;
-    root["remaining_ah"] = bms.remainingAh;
-    root["max_charge_current_limit"] = bms.maxChargeCurrentLimit;
-    root["status_category"] = haStatusCategory();
-    root["substatus"] = haSubstatusText();
-    root["status_raw"] = bms.status;
-    root["warning_raw"] = bms.warning;
-    root["protect_raw"] = bms.protect;
-    root["cycles"] = bms.cycles;
-    root["reserved_status"] = bms.reservedStatus;
-    root["cell_count"] = bms.cellCount ? bms.cellCount : 15;
-    root["cell_min_v"] = bms.minCellV;
-    root["cell_avg_v"] = bms.avgCellV;
-    root["cell_max_v"] = bms.maxCellV;
-    root["cell_delta_v"] = bms.cellDeltaV;
+  JsonObject system = root.createNestedObject("system");
+  JsonObject wifi = system.createNestedObject("wifi");
+  wifi["connected"] = wifiConnected();
+  wifi["ip"] = wifiConnected() ? WiFi.localIP().toString() : "n/a";
+  system["uptime_ms"] = millis();
+  system["errors"] = bms.errorCount;
+  system["active_slave_id"] = bms.activeSlaveId;
+  system["last_tried_slave_id"] = bms.lastTriedSlaveId;
+  system["last_update_ms"] = bms.lastUpdateMs;
 
-    JsonArray cellVoltages = root.createNestedArray("cell_voltages_mv");
-    JsonArray cells = root.createNestedArray("cells");
-    for (int i = 0; i < 16; i++)
-    {
-      root[String("cell_") + String(i + 1) + "_mv"] = bms.cellsV[i];
-      cellVoltages.add(bms.cellsV[i]);
+  JsonObject status = root.createNestedObject("status");
+  status["online"] = bms.online;
+  status["health_text"] = healthText();
+  status["operating_text"] = operatingStateText();
+  status["category"] = haStatusCategory();
+  status["text"] = statusDetailText();
+  JsonObject statusRaw = status.createNestedObject("raw");
+  statusRaw["status"] = bms.status;
+  statusRaw["warning"] = bms.warning;
+  statusRaw["protect"] = bms.protect;
+  statusRaw["cycles"] = bms.cycles;
+  statusRaw["reserved_status"] = bms.reservedStatus;
+  JsonObject statusHex = status.createNestedObject("hex");
+  statusHex["status"] = formatHex16(bms.status);
+  statusHex["warning"] = formatHex16(bms.warning);
+  statusHex["protect"] = formatHex16(bms.protect);
+  JsonObject diagnostics = root.createNestedObject("diagnostics");
+  JsonObject crc = diagnostics.createNestedObject("crc");
+  crc["received"] = bms.crcReceived;
+  crc["calculated"] = bms.crcCalculated;
 
-      JsonObject cell = cells.createNestedObject();
-      cell["index"] = i + 1;
-      cell["mv"] = bms.cellsV[i];
-      cell["v"] = bms.cellVolts[i];
-    }
+  JsonObject pack = root.createNestedObject("pack");
+  pack["voltage_v"] = bms.packV;
+  pack["current_a"] = bms.current;
+  pack["soc_pct"] = bms.soc;
+  pack["soh_pct"] = bms.soh;
 
-    JsonArray rawRegs = root.createNestedArray("raw_regs");
-    for (uint8_t i = 0; i < bms.rawCount; i++)
-    {
-      rawRegs.add(bms.rawRegs[i]);
-    }
-    return;
-  }
+  JsonObject temperatures = root.createNestedObject("temperatures");
+  temperatures["pcb_c"] = bms.tempPCB;
+  temperatures["cell_min_c"] = bms.envTemp;
+  temperatures["cell_max_c"] = bms.maxCellTemp;
 
-  root["online"] = bms.online;
-  root["active_slave_id"] = bms.activeSlaveId;
-  root["health_text"] = healthText();
-  root["operating_text"] = operatingStateText();
-  root["status"] = haStatusCategory();
-  root["substatus"] = haSubstatusText();
-  root["status_raw"] = bms.status;
-  root["warning_raw"] = bms.warning;
-  root["protect_raw"] = bms.protect;
-  root["cell_count"] = bms.cellCount ? bms.cellCount : 15;
-  root["pack_voltage_v"] = bms.packV;
-  root["current_a"] = bms.current;
-  root["soc_pct"] = bms.soc;
-  root["soh_pct"] = bms.soh;
-  root["temp_1_c"] = bms.envTemp;
-  root["temp_2_c"] = bms.maxCellTemp;
-  root["temp_3_c"] = bms.tempPCB;
-  root["remaining_ah"] = bms.remainingAh;
-  root["max_charge_current_limit"] = bms.maxChargeCurrentLimit;
-  root["cell_min_v"] = bms.minCellV;
-  root["cell_avg_v"] = bms.avgCellV;
-  root["cell_max_v"] = bms.maxCellV;
-  root["cell_delta_v"] = bms.cellDeltaV;
-  root["warning_hex"] = formatHex16(bms.warning);
-  root["protect_hex"] = formatHex16(bms.protect);
-  root["status_hex"] = formatHex16(bms.status);
-  root["cycles"] = bms.cycles;
-  root["reserved_status"] = bms.reservedStatus;
+  JsonObject limits = root.createNestedObject("limits");
+  limits["remaining_ah"] = bms.remainingAh;
+  limits["max_charge_current_limit"] = bms.maxChargeCurrentLimit;
 
+  JsonObject cells = root.createNestedObject("cells");
+  cells["count"] = bms.cellCount ? bms.cellCount : 15;
+  cells["min_v"] = bms.minCellV;
+  cells["avg_v"] = bms.avgCellV;
+  cells["max_v"] = bms.maxCellV;
+  cells["delta_v"] = bms.cellDeltaV;
+  JsonArray cellVoltages = cells.createNestedArray("voltages_v");
   for (int i = 0; i < 16; i++)
   {
-    root[String("cell_") + String(i + 1) + "_mv"] = bms.cellsV[i];
+    cellVoltages.add(bms.cellVolts[i]);
   }
 
-  JsonArray cellVoltages = root.createNestedArray("cell_voltages_mv");
-  for (int i = 0; i < 16; i++)
+  JsonArray rawRegs = diagnostics.createNestedArray("raw_regs");
+  for (uint8_t i = 0; i < bms.rawCount; i++)
   {
-    cellVoltages.add(bms.cellsV[i]);
+    rawRegs.add(bms.rawRegs[i]);
   }
 }
 
@@ -746,19 +699,7 @@ void handleJson()
 {
   DynamicJsonDocument doc(JSON_DOC_CAPACITY);
   JsonObject root = doc.to<JsonObject>();
-  fillTelemetryJson(root, false);
-
-  String json;
-  json.reserve(measureJson(doc) + 1);
-  serializeJson(doc, json);
-  server.send(200, "application/json", json);
-}
-
-void handleHaJson()
-{
-  DynamicJsonDocument doc(JSON_DOC_CAPACITY);
-  JsonObject root = doc.to<JsonObject>();
-  fillTelemetryJson(root, true);
+  fillTelemetryJson(root);
 
   String json;
   json.reserve(measureJson(doc) + 1);
@@ -790,7 +731,6 @@ void setup()
   server.on("/", handleRoot);
   server.on("/diag", handleDiag);
   server.on("/json", handleJson);
-  server.on("/ha", handleHaJson);
   server.begin();
 }
 
@@ -800,18 +740,22 @@ void loop()
   static unsigned long lastLog = 0;
   static uint8_t scanId = PREFERRED_BMS_ID;
 
-  if (millis() - lastPoll >= 3000) {
+  if (millis() - lastPoll >= 3000)
+  {
     bool ok = requestBmsData(bms.online ? bms.activeSlaveId : scanId);
-    if (!ok && !bms.online) {
+    if (!ok && !bms.online)
+    {
       scanId++;
-      if (scanId > BMS_ID_MAX) {
+      if (scanId > BMS_ID_MAX)
+      {
         scanId = BMS_ID_MIN;
       }
     }
     lastPoll = millis();
   }
 
-  if (millis() - lastLog >= 3000) {
+  if (millis() - lastLog >= 3000)
+  {
     lastLog = millis();
     Serial.print("BMS ");
     Serial.print(bms.online ? "ONLINE" : "OFFLINE");
@@ -827,7 +771,8 @@ void loop()
     Serial.println(formatHex16(bms.crcCalculated));
   }
 
-  if (ENABLE_DEYE_CAN && bms.online) sendDeyeCanTelemetry();
+  if (ENABLE_DEYE_CAN && bms.online)
+    sendDeyeCanTelemetry();
 
   server.handleClient();
   delay(1);

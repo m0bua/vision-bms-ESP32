@@ -1,299 +1,207 @@
-rest:
-  - resource: http://192.168.0.110/ha
+﻿rest:
+  - resource: http://192.168.0.50/json
     scan_interval: 10
     sensor:
       - name: BMS Raw
         unique_id: bms_raw
-        value_template: "{{ value_json.status }}"
+        value_template: "{{ value_json.status.category }}"
         json_attributes:
-          - online
-          - errors
-          - active_slave_id
-          - last_tried_slave_id
-          - can_enabled
-          - mode
-          - mode_label
-          - health_text
-          - operating_text
+          - system
           - status
-          - substatus
-          - status_raw
-          - warning_raw
-          - protect_raw
-          - cycles
-          - reserved_status
-          - cell_count
-          - last_update_ms
-          - crc_received
-          - crc_calculated
-          - pack_voltage_v
-          - current_a
-          - soc_pct
-          - soh_pct
-          - temp_1_c
-          - temp_2_c
-          - temp_3_c
-          - remaining_ah
-          - max_charge_current_limit
-          - cell_min_v
-          - cell_avg_v
-          - cell_max_v
-          - cell_delta_v
-          - cell_1_mv
-          - cell_2_mv
-          - cell_3_mv
-          - cell_4_mv
-          - cell_5_mv
-          - cell_6_mv
-          - cell_7_mv
-          - cell_8_mv
-          - cell_9_mv
-          - cell_10_mv
-          - cell_11_mv
-          - cell_12_mv
-          - cell_13_mv
-          - cell_14_mv
-          - cell_15_mv
+          - pack
+          - temperatures
+          - limits
+          - cells
+          - diagnostics
 
 template:
   - sensor:
       - name: BMS Status
         unique_id: bms_status
-        state: "{{ state_attr('sensor.bms_raw', 'status') }}"
-      - name: BMS Substatus
-        unique_id: bms_substatus
-        state: "{{ state_attr('sensor.bms_raw', 'substatus') }}"
+        state: "{{ state_attr('sensor.bms_raw', 'status').category }}"
       - name: BMS Online
         unique_id: bms_online
-        state: "{{ state_attr('sensor.bms_raw', 'online') }}"
+        state: "{{ state_attr('sensor.bms_raw', 'status').online }}"
+      - name: BMS Errors
+        unique_id: bms_errors
+        state: "{{ state_attr('sensor.bms_raw', 'system').errors }}"
+      - name: BMS Active Slave ID
+        unique_id: bms_active_slave_id
+        state: "{{ state_attr('sensor.bms_raw', 'system').active_slave_id }}"
       - name: BMS Health
         unique_id: bms_health
-        state: "{{ state_attr('sensor.bms_raw', 'health_text') }}"
+        state: "{{ state_attr('sensor.bms_raw', 'status').health_text }}"
       - name: BMS Operating State
         unique_id: bms_operating_state
-        state: "{{ state_attr('sensor.bms_raw', 'operating_text') }}"
+        state: "{{ state_attr('sensor.bms_raw', 'status').operating_text }}"
       - name: BMS Pack Voltage
         unique_id: bms_pack_voltage
-        state: "{{ state_attr('sensor.bms_raw', 'pack_voltage_v') }}"
+        state: "{{ state_attr('sensor.bms_raw', 'pack').voltage_v }}"
         unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Current
         unique_id: bms_current
-        state: "{{ state_attr('sensor.bms_raw', 'current_a') }}"
+        state: "{{ state_attr('sensor.bms_raw', 'pack').current_a }}"
         unit_of_measurement: "A"
         device_class: current
         state_class: measurement
       - name: BMS SOC
         unique_id: bms_soc
-        state: "{{ state_attr('sensor.bms_raw', 'soc_pct') }}"
+        state: "{{ state_attr('sensor.bms_raw', 'pack').soc_pct }}"
         unit_of_measurement: "%"
         device_class: battery
         state_class: measurement
       - name: BMS SOH
         unique_id: bms_soh
-        state: "{{ state_attr('sensor.bms_raw', 'soh_pct') }}"
+        state: "{{ state_attr('sensor.bms_raw', 'pack').soh_pct }}"
         unit_of_measurement: "%"
         state_class: measurement
-      - name: BMS Temp 1
+      - name: BMS PCB Temperature
         unique_id: bms_temp_1
-        state: "{{ state_attr('sensor.bms_raw', 'temp_1_c') }}"
+        state: "{{ state_attr('sensor.bms_raw', 'temperatures').pcb_c }}"
         unit_of_measurement: "°C"
         device_class: temperature
         state_class: measurement
-      - name: BMS Temp 2
+      - name: BMS Cell Min Temperature
         unique_id: bms_temp_2
-        state: "{{ state_attr('sensor.bms_raw', 'temp_2_c') }}"
+        state: "{{ state_attr('sensor.bms_raw', 'temperatures').cell_min_c }}"
         unit_of_measurement: "°C"
         device_class: temperature
         state_class: measurement
-      - name: BMS Temp 3
+      - name: BMS Cell Max Temperature
         unique_id: bms_temp_3
-        state: "{{ state_attr('sensor.bms_raw', 'temp_3_c') }}"
+        state: "{{ state_attr('sensor.bms_raw', 'temperatures').cell_max_c }}"
         unit_of_measurement: "°C"
         device_class: temperature
         state_class: measurement
       - name: BMS Remaining Ah
         unique_id: bms_remaining_ah
-        state: "{{ state_attr('sensor.bms_raw', 'remaining_ah') }}"
+        state: "{{ state_attr('sensor.bms_raw', 'limits').remaining_ah }}"
         unit_of_measurement: "Ah"
         state_class: measurement
       - name: BMS Min Cell Voltage
         unique_id: bms_min_cell_voltage
-        state: "{{ state_attr('sensor.bms_raw', 'cell_min_v') }}"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').min_v }}"
         unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Avg Cell Voltage
         unique_id: bms_avg_cell_voltage
-        state: "{{ state_attr('sensor.bms_raw', 'cell_avg_v') }}"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').avg_v }}"
         unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Max Cell Voltage
         unique_id: bms_max_cell_voltage
-        state: "{{ state_attr('sensor.bms_raw', 'cell_max_v') }}"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').max_v }}"
         unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Cell Delta
         unique_id: bms_cell_delta
-        state: "{{ state_attr('sensor.bms_raw', 'cell_delta_v') }}"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').delta_v }}"
         unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
-
       - name: BMS Cell 1
         unique_id: bms_cell_1
-        state: "{{ state_attr('sensor.bms_raw', 'cell_1_mv') }}"
-        unit_of_measurement: "mV"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').voltages_v[0] }}"
+        unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Cell 2
         unique_id: bms_cell_2
-        state: "{{ state_attr('sensor.bms_raw', 'cell_2_mv') }}"
-        unit_of_measurement: "mV"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').voltages_v[1] }}"
+        unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Cell 3
         unique_id: bms_cell_3
-        state: "{{ state_attr('sensor.bms_raw', 'cell_3_mv') }}"
-        unit_of_measurement: "mV"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').voltages_v[2] }}"
+        unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Cell 4
         unique_id: bms_cell_4
-        state: "{{ state_attr('sensor.bms_raw', 'cell_4_mv') }}"
-        unit_of_measurement: "mV"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').voltages_v[3] }}"
+        unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Cell 5
         unique_id: bms_cell_5
-        state: "{{ state_attr('sensor.bms_raw', 'cell_5_mv') }}"
-        unit_of_measurement: "mV"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').voltages_v[4] }}"
+        unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Cell 6
         unique_id: bms_cell_6
-        state: "{{ state_attr('sensor.bms_raw', 'cell_6_mv') }}"
-        unit_of_measurement: "mV"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').voltages_v[5] }}"
+        unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Cell 7
         unique_id: bms_cell_7
-        state: "{{ state_attr('sensor.bms_raw', 'cell_7_mv') }}"
-        unit_of_measurement: "mV"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').voltages_v[6] }}"
+        unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Cell 8
         unique_id: bms_cell_8
-        state: "{{ state_attr('sensor.bms_raw', 'cell_8_mv') }}"
-        unit_of_measurement: "mV"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').voltages_v[7] }}"
+        unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Cell 9
         unique_id: bms_cell_9
-        state: "{{ state_attr('sensor.bms_raw', 'cell_9_mv') }}"
-        unit_of_measurement: "mV"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').voltages_v[8] }}"
+        unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Cell 10
         unique_id: bms_cell_10
-        state: "{{ state_attr('sensor.bms_raw', 'cell_10_mv') }}"
-        unit_of_measurement: "mV"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').voltages_v[9] }}"
+        unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Cell 11
         unique_id: bms_cell_11
-        state: "{{ state_attr('sensor.bms_raw', 'cell_11_mv') }}"
-        unit_of_measurement: "mV"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').voltages_v[10] }}"
+        unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Cell 12
         unique_id: bms_cell_12
-        state: "{{ state_attr('sensor.bms_raw', 'cell_12_mv') }}"
-        unit_of_measurement: "mV"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').voltages_v[11] }}"
+        unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Cell 13
         unique_id: bms_cell_13
-        state: "{{ state_attr('sensor.bms_raw', 'cell_13_mv') }}"
-        unit_of_measurement: "mV"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').voltages_v[12] }}"
+        unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Cell 14
         unique_id: bms_cell_14
-        state: "{{ state_attr('sensor.bms_raw', 'cell_14_mv') }}"
-        unit_of_measurement: "mV"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').voltages_v[13] }}"
+        unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
       - name: BMS Cell 15
         unique_id: bms_cell_15
-        state: "{{ state_attr('sensor.bms_raw', 'cell_15_mv') }}"
-        unit_of_measurement: "mV"
+        state: "{{ state_attr('sensor.bms_raw', 'cells').voltages_v[14] }}"
+        unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
 
   - binary_sensor:
       - name: BMS Warning Active
         unique_id: bms_warning_active
-        state: "{{ state_attr('sensor.bms_raw', 'status') == 'warning' }}"
+        state: "{{ state_attr('sensor.bms_raw', 'status').category == 'warning' }}"
       - name: BMS Protected Active
         unique_id: bms_protected_active
-        state: "{{ state_attr('sensor.bms_raw', 'status') == 'protected' }}"
+        state: "{{ state_attr('sensor.bms_raw', 'status').category == 'protected' }}"
       - name: BMS Status Active
         unique_id: bms_status_active
-        state: "{{ state_attr('sensor.bms_raw', 'status') == 'status' }}"
-
-      - name: BMS Substatus Discharge FET
-        unique_id: bms_substatus_discharge_fet
-        state: "{{ 'Discharge FET' in (state_attr('sensor.bms_raw', 'substatus') or '') }}"
-      - name: BMS Substatus Charge FET
-        unique_id: bms_substatus_charge_fet
-        state: "{{ 'Charge FET' in (state_attr('sensor.bms_raw', 'substatus') or '') }}"
-      - name: BMS Substatus Standby Bit
-        unique_id: bms_substatus_standby_bit
-        state: "{{ 'Standby / extra bit' in (state_attr('sensor.bms_raw', 'substatus') or '') }}"
-
-      - name: BMS Substatus Cell Overvoltage
-        unique_id: bms_substatus_cell_overvoltage
-        state: "{{ 'Cell overvoltage' in (state_attr('sensor.bms_raw', 'substatus') or '') }}"
-      - name: BMS Substatus Cell Undervoltage
-        unique_id: bms_substatus_cell_undervoltage
-        state: "{{ 'Cell undervoltage' in (state_attr('sensor.bms_raw', 'substatus') or '') }}"
-      - name: BMS Substatus Pack Overvoltage
-        unique_id: bms_substatus_pack_overvoltage
-        state: "{{ 'Pack overvoltage' in (state_attr('sensor.bms_raw', 'substatus') or '') }}"
-      - name: BMS Substatus Pack Undervoltage
-        unique_id: bms_substatus_pack_undervoltage
-        state: "{{ 'Pack undervoltage' in (state_attr('sensor.bms_raw', 'substatus') or '') }}"
-      - name: BMS Substatus Charge Overtemperature
-        unique_id: bms_substatus_charge_overtemperature
-        state: "{{ 'Charge overtemperature' in (state_attr('sensor.bms_raw', 'substatus') or '') }}"
-      - name: BMS Substatus Charge Undertemperature
-        unique_id: bms_substatus_charge_undertemperature
-        state: "{{ 'Charge undertemperature' in (state_attr('sensor.bms_raw', 'substatus') or '') }}"
-      - name: BMS Substatus Discharge Overtemperature
-        unique_id: bms_substatus_discharge_overtemperature
-        state: "{{ 'Discharge overtemperature' in (state_attr('sensor.bms_raw', 'substatus') or '') }}"
-      - name: BMS Substatus Discharge Undertemperature
-        unique_id: bms_substatus_discharge_undertemperature
-        state: "{{ 'Discharge undertemperature' in (state_attr('sensor.bms_raw', 'substatus') or '') }}"
-      - name: BMS Substatus Charge Overcurrent
-        unique_id: bms_substatus_charge_overcurrent
-        state: "{{ 'Charge overcurrent' in (state_attr('sensor.bms_raw', 'substatus') or '') }}"
-      - name: BMS Substatus Discharge Overcurrent
-        unique_id: bms_substatus_discharge_overcurrent
-        state: "{{ 'Discharge overcurrent' in (state_attr('sensor.bms_raw', 'substatus') or '') }}"
-      - name: BMS Substatus Short Circuit
-        unique_id: bms_substatus_short_circuit
-        state: "{{ 'Short circuit' in (state_attr('sensor.bms_raw', 'substatus') or '') }}"
-      - name: BMS Substatus IC Front-End Error
-        unique_id: bms_substatus_ic_frontend_error
-        state: "{{ 'IC front-end error' in (state_attr('sensor.bms_raw', 'substatus') or '') }}"
-      - name: BMS Substatus Mosfet Software Lock
-        unique_id: bms_substatus_mosfet_software_lock
-        state: "{{ 'Mosfet software lock' in (state_attr('sensor.bms_raw', 'substatus') or '') }}"
-      - name: BMS Substatus Software Lock MOS
-        unique_id: bms_substatus_software_lock_mos
-        state: "{{ 'Software lock MOS' in (state_attr('sensor.bms_raw', 'substatus') or '') }}"
+        state: "{{ state_attr('sensor.bms_raw', 'status').category == 'status' }}"
