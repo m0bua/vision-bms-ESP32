@@ -106,6 +106,13 @@ static inline float roundTo3(float value)
   return roundf(value * 1000.0f) / 1000.0f;
 }
 
+String formatJsonFloat(float value, uint8_t decimals = 3)
+{
+  char buf[20];
+  snprintf(buf, sizeof(buf), "%.*f", decimals, value);
+  return String(buf);
+}
+
 String formatHex16(uint16_t value)
 {
   char buf[8];
@@ -657,8 +664,8 @@ void fillTelemetryJson(JsonObject root)
   crc["calculated"] = bms.crcCalculated;
 
   JsonObject pack = root.createNestedObject("pack");
-  pack["voltage_v"] = bms.packV;
-  pack["current_a"] = bms.current;
+  pack["voltage_v"] = serialized(formatJsonFloat(bms.packV));
+  pack["current_a"] = serialized(formatJsonFloat(bms.current));
   pack["soc_pct"] = bms.soc;
   pack["soh_pct"] = bms.soh;
 
@@ -673,14 +680,14 @@ void fillTelemetryJson(JsonObject root)
 
   JsonObject cells = root.createNestedObject("cells");
   cells["count"] = bms.cellCount ? bms.cellCount : 15;
-  cells["min_v"] = bms.minCellV;
-  cells["avg_v"] = bms.avgCellV;
-  cells["max_v"] = bms.maxCellV;
-  cells["delta_v"] = bms.cellDeltaV;
+  cells["min_v"] = serialized(formatJsonFloat(bms.minCellV));
+  cells["avg_v"] = serialized(formatJsonFloat(bms.avgCellV));
+  cells["max_v"] = serialized(formatJsonFloat(bms.maxCellV));
+  cells["delta_v"] = serialized(formatJsonFloat(bms.cellDeltaV));
   JsonArray cellVoltages = cells.createNestedArray("voltages_v");
   for (int i = 0; i < 16; i++)
   {
-    cellVoltages.add(bms.cellVolts[i]);
+    cellVoltages.add(serialized(formatJsonFloat(bms.cellVolts[i])));
   }
 
   JsonArray rawRegs = diagnostics.createNestedArray("raw_regs");
