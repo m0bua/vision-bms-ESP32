@@ -273,11 +273,11 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   .card{max-width:1200px;margin:0 auto 16px auto;padding:16px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
   .cell{padding:10px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);}
-  .reg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:12px}
+  .reg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(9em,1fr));gap:12px;margin-top:12px}
   .reg-card{padding:12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line)}
   .reg-line{line-height:1.35}
   .reg-addr,.reg-hex,.reg-dec{word-break:break-all}
-  .reg-addr,.reg-hex{font-family:monospace;color:var(--muted);font-size:12px}
+  .reg-addr,.reg-hex{font-family:monospace;color:var(--muted);font-size:12px;display:inline-block}
   .reg-name{font-size:14px;font-weight:700;margin:4px 0;color:var(--text)}
   .reg-dec{font-size:12px;color:var(--muted)}
   .flag-group{margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#151515;}
@@ -289,18 +289,19 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   .tag-protect{background:#3c1818;color:#ffd0d0;border-color:#7f2e2e;}
   .soft{color:var(--muted);}
 </style></head><body>
-<div class='card'><h1>Diagnostics</h1>
-<div><a href='/'>Back to dashboard</a></div>
-<div>Active ID: __ACTIVE_ID__ | Last tried: __LAST_TRIED__</div>
-<div>Status: __ONLINE__ | Errors: __ERRORS__</div>
-<div>Operating state: __OPERATING__</div>
-<div>Health: <span class='__HEALTH_CLASS__'>__HEALTH_TEXT__</span></div>
-<div>Status: __STATUS_HEX__ <span class='muted'>(__STATUS_TEXT__)</span></div>
-<div>Warning: __WARNING_HEX__ <span class='muted'>(__WARNING_TEXT__)</span></div>
-<div>Protect: __PROTECT_HEX__ <span class='muted'>(__PROTECT_TEXT__)</span></div>
-<div>Cycles: __CYCLES__</div>
-<div>Cell count: __CELL_COUNT__</div>
-<div>CRC rx: __CRC_RX__ | CRC calc: __CRC_CALC__</div>
+<div class='card'>
+  <h1>Diagnostics</h1>
+  <div><a href='/'>Back to dashboard</a></div><br>
+  <div>Active ID: __ACTIVE_ID__ | Last tried: __LAST_TRIED__</div>
+  <div>Status: __ONLINE__ | Errors: __ERRORS__</div>
+  <div>Operating state: __OPERATING__</div>
+  <div>Health: <span class='__HEALTH_CLASS__'>__HEALTH_TEXT__</span></div>
+  <div>Status: __STATUS_HEX__ <span class='muted'>(__STATUS_TEXT__)</span></div>
+  <div>Warning: __WARNING_HEX__ <span class='muted'>(__WARNING_TEXT__)</span></div>
+  <div>Protect: __PROTECT_HEX__ <span class='muted'>(__PROTECT_TEXT__)</span></div>
+  <div>Cycles: __CYCLES__</div>
+  <div>Cell count: __CELL_COUNT__</div>
+  <div>CRC rx: __CRC_RX__ | CRC calc: __CRC_CALC__</div>
 </div>
 __RAW_REGS__
 </body></html>
