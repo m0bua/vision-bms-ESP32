@@ -28,7 +28,7 @@ struct BmsSnapshot
   float current = 0.0f;
   int soc = 0;
   int soh = 0;
-  int envTemp = 0;
+  int minCellTemp = 0;
   int maxCellTemp = 0;
   int tempPCB = 0;
   uint16_t remainingAh = 0;
@@ -434,9 +434,9 @@ void decodeSnapshot()
   bms.avgCellV = roundTo3(validCells > 0 ? (sumCell / validCells) : 0.0f);
   bms.cellDeltaV = roundTo3(maxCell - minCell);
 
-  bms.envTemp = (int16_t)bms.rawRegs[0x12];
-  bms.maxCellTemp = (int16_t)bms.rawRegs[0x13];
-  bms.tempPCB = (int16_t)bms.rawRegs[0x14];
+  bms.tempPCB = (int16_t)bms.rawRegs[0x12];
+  bms.minCellTemp = (int16_t)bms.rawRegs[0x13];
+  bms.maxCellTemp = (int16_t)bms.rawRegs[0x14];
   bms.remainingAh = bms.rawRegs[0x15];
   bms.maxChargeCurrentLimit = bms.rawRegs[0x16];
   bms.soh = bms.rawRegs[0x17];
@@ -664,7 +664,7 @@ void fillTelemetryJson(JsonObject root)
 
   JsonObject temperatures = root.createNestedObject("temperatures");
   temperatures["pcb_c"] = bms.tempPCB;
-  temperatures["cell_min_c"] = bms.envTemp;
+  temperatures["cell_min_c"] = bms.minCellTemp;
   temperatures["cell_max_c"] = bms.maxCellTemp;
 
   JsonObject limits = root.createNestedObject("limits");
