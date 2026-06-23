@@ -270,7 +270,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
 <style>
   __UI_SHARED_CSS__
   body{__UI_THEME_BASE_VARS____UI_THEME_CUSTOM_VARS__padding:18px}
-  body.clickable{cursor:pointer}
+  #clickable{cursor:pointer;margin-bottom:.5em}
   .card{max-width:1200px;margin:0 auto 16px auto;padding:16px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
   .cell{padding:10px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);}
@@ -292,8 +292,8 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
 </style></head><body data-refresh-seconds='__REFRESH_SECONDS__'>
 <div class='card'>
   <h1>Diagnostics</h1>
-  <div class='soft'>Auto refresh: __REFRESH_STATE__ | click anywhere to __REFRESH_ACTION__</div>
   <div><a href='/'>Back to dashboard</a></div><br>
+  <div id='clickable' class='soft'>Auto refresh: __REFRESH_STATE__ | click to __REFRESH_ACTION__</div>
   <div>Active ID: __ACTIVE_ID__ | Last tried: __LAST_TRIED__</div>
   <div>Status: __ONLINE__ | Errors: __ERRORS__</div>
   <div>Operating state: __OPERATING__</div>
@@ -317,8 +317,7 @@ __RAW_REGS__
     }
     window.location.href = url.toString();
   };
-  document.body.classList.add('clickable');
-  document.body.addEventListener('click', (event) => {
+  document.getElementById('clickable').addEventListener('click', (event) => {
     if (event.target.closest('a, button, input, textarea, select, label')) return;
     toggleRefresh();
   });
