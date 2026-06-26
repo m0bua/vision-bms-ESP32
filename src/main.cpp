@@ -198,7 +198,7 @@ struct FlagName
 const FlagName STATUS_FLAGS[] = {
     {0x0001, "Discharge"},
     {0x0002, "Charge"},
-    {0x1000, "Standby"},
+    {0x1000, "Balancing"},
 };
 
 const FlagName WARNING_FLAGS[] = {
@@ -316,9 +316,13 @@ String operatingStateText()
   {
     return "Warning";
   }
-  if (bms.status == 0 || (bms.status & 0x1000) != 0 || (bms.warning == 2 && bms.protect == 4096 && fabs(bms.current) < 0.5f && bms.soc >= 95))
+  if (bms.status == 0 || (bms.warning == 2 && bms.protect == 4096 && fabs(bms.current) < 0.5f && bms.soc >= 95))
   {
     return "Standby";
+  }
+  if ((bms.status & 0x1000) != 0)
+  {
+    return "Balancing";
   }
   if (bms.status != 0)
   {
