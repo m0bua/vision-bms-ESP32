@@ -308,10 +308,6 @@ String operatingStateText()
   {
     return "Discharging";
   }
-  if ((bms.status & 0x1000) != 0 || (bms.warning == 2 && bms.protect == 4096 && fabs(bms.current) < 0.5f && bms.soc >= 95))
-  {
-    return "Standby";
-  }
   if (bms.protect != 0)
   {
     return "Protected";
@@ -319,6 +315,10 @@ String operatingStateText()
   if (bms.warning != 0)
   {
     return "Warning";
+  }
+  if (bms.status == 0 || (bms.status & 0x1000) != 0 || (bms.warning == 2 && bms.protect == 4096 && fabs(bms.current) < 0.5f && bms.soc >= 95))
+  {
+    return "Standby";
   }
   if (bms.status != 0)
   {
@@ -342,6 +342,10 @@ String healthClass()
 
 String statusFlagsText()
 {
+  if (bms.status == 0)
+  {
+    return "Standby";
+  }
   return decodeBitmask(bms.status, STATUS_FLAGS, sizeof(STATUS_FLAGS) / sizeof(STATUS_FLAGS[0]));
 }
 
