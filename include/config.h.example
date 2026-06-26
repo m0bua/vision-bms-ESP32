@@ -7,6 +7,7 @@
 
 constexpr const char* WIFI_SSID = "your-wifi-ssid";
 constexpr const char* WIFI_PASSWORD = "your-wifi-password";
+constexpr bool WIFI_SSID_HIDDEN = false;
 
 constexpr bool ENABLE_DEYE_CAN = true;
 

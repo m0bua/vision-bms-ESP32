@@ -737,6 +737,14 @@ void setup()
   }
 
   WiFi.mode(WIFI_STA);
+  if (WIFI_SSID_HIDDEN)
+  {
+    WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+  }
+  else
+  {
+    WiFi.setScanMethod(WIFI_FAST_SCAN);
+  }
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   server.on("/", handleRoot);
