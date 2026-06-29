@@ -50,6 +50,8 @@ struct BmsSnapshot
   int minCellTemp = 0;
   int maxCellTemp = 0;
   int tempPCB = 0;
+  int tempSensors[4] = {0, 0, 0, 0};
+  uint8_t tempSensorCount = 0;
   uint16_t remainingAh = 0;
   uint16_t maxChargeCurrentLimit = 0;
   uint16_t status = 0;
@@ -167,6 +169,22 @@ String formatHex16(uint16_t value)
   char buf[8];
   snprintf(buf, sizeof(buf), "0x%04X", value);
   return String(buf);
+}
+
+String formatIntArray(const int *values, uint8_t count)
+{
+  String out;
+  for (uint8_t i = 0; i < count; i++)
+  {
+    if (i > 0)
+      out += ", ";
+    out += String(values[i]);
+  }
+  if (out.isEmpty())
+  {
+    out = "none";
+  }
+  return out;
 }
 
 String formatByteBuffer(const uint8_t *buf, size_t len)
@@ -548,6 +566,7 @@ void clearSnapshotData()
 {
   bms.online = false;
   bms.rawCount = 0;
+  bms.tempSensorCount = 0;
   bms.rawSlaveId = 0;
   bms.rawFunction = 0;
   bms.rawByteCount = 0;
@@ -618,8 +637,21 @@ void decodeSnapshot()
   bms.cellDeltaV = roundTo3(maxCell - minCell);
 
   bms.tempPCB = (int16_t)bms.rawRegs[0x12];
-  bms.minCellTemp = (int16_t)bms.rawRegs[0x13];
-  bms.maxCellTemp = (int16_t)bms.rawRegs[0x14];
+  bms.tempSensorCount = 0;
+  bms.tempSensors[bms.tempSensorCount++] = (int16_t)bms.rawRegs[0x13];
+  bms.tempSensors[bms.tempSensorCount++] = (int16_t)bms.rawRegs[0x14];
+
+  int tempMin = bms.tempSensors[0];
+  int tempMax = bms.tempSensors[0];
+  for (uint8_t i = 1; i < bms.tempSensorCount; i++)
+  {
+    if (bms.tempSensors[i] < tempMin)
+      tempMin = bms.tempSensors[i];
+    if (bms.tempSensors[i] > tempMax)
+      tempMax = bms.tempSensors[i];
+  }
+  bms.minCellTemp = tempMin;
+  bms.maxCellTemp = tempMax;
   bms.remainingAh = bms.rawRegs[0x15];
   bms.maxChargeCurrentLimit = bms.rawRegs[0x16];
   bms.soh = bms.rawRegs[0x17];
@@ -870,6 +902,8 @@ String buildDiagHtml(uint16_t refreshSeconds)
   html.replace("__DEBUG_LAST_POLL_MS__", String(dbg.lastPollDurationMs));
   html.replace("__DEBUG_LAST_FRAME_LEN__", String(dbg.lastFrameLen));
   html.replace("__DEBUG_LAST_FRAME__", ENABLE_DEBUG_RAW_FRAMES ? formatByteBuffer(dbg.lastResponse, dbg.lastResponseLen) : String("disabled"));
+  html.replace("__DEBUG_TEMP_SENSORS__", formatIntArray(bms.tempSensors, bms.tempSensorCount));
+  html.replace("__DEBUG_TEMP_SENSOR_COUNT__", String(bms.tempSensorCount));
   html.replace("__DEBUG_CAN_INIT__", String((int)dbg.canInitResult));
   html.replace("__DEBUG_CAN_START__", String((int)dbg.canStartResult));
   html.replace("__DEBUG_CAN_STATUS__", dbg.canStarted ? "started" : (ENABLE_DEYE_CAN ? "not started" : "disabled"));
@@ -968,6 +1002,12 @@ void fillTelemetryJson(JsonObject root)
   temperatures["pcb_c"] = bms.tempPCB;
   temperatures["cell_min_c"] = bms.minCellTemp;
   temperatures["cell_max_c"] = bms.maxCellTemp;
+  temperatures["sensor_count"] = bms.tempSensorCount;
+  JsonArray tempSensors = temperatures.createNestedArray("raw_c");
+  for (uint8_t i = 0; i < bms.tempSensorCount; i++)
+  {
+    tempSensors.add(bms.tempSensors[i]);
+  }
 
   JsonObject limits = root.createNestedObject("limits");
   limits["remaining_ah"] = bms.remainingAh;

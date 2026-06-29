@@ -303,6 +303,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   <div>Protect: __PROTECT_HEX__ <span class='muted'>(__PROTECT_TEXT__)</span></div>
   <div>Cycles: __CYCLES__</div>
   <div>Cell count: __CELL_COUNT__</div>
+  <div>Temp sensors: __DEBUG_TEMP_SENSOR_COUNT__ | Raw: <span class='muted'>__DEBUG_TEMP_SENSORS__</span></div>
   <div>CRC rx: __CRC_RX__ | CRC calc: __CRC_CALC__</div>
   <div style='margin-top:12px;padding-top:12px;border-top:1px solid var(--line)'>
     <div class='flag-title'>Debug</div>
