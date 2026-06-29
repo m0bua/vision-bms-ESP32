@@ -304,6 +304,17 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   <div>Cycles: __CYCLES__</div>
   <div>Cell count: __CELL_COUNT__</div>
   <div>CRC rx: __CRC_RX__ | CRC calc: __CRC_CALC__</div>
+  <div style='margin-top:12px;padding-top:12px;border-top:1px solid var(--line)'>
+    <div class='flag-title'>Debug</div>
+    <div>Polls: __DEBUG_POLL_COUNT__ | Success: __DEBUG_SUCCESS_COUNT__ | Fail: __DEBUG_FAIL_COUNT__</div>
+    <div>Last fail: <span class='tag tag-muted'>__DEBUG_LAST_FAIL__</span></div>
+    <div>Last poll: __DEBUG_LAST_POLL_MS__ ms | Last frame len: __DEBUG_LAST_FRAME_LEN__</div>
+    <div>CAN init: __DEBUG_CAN_INIT__ | CAN start: __DEBUG_CAN_START__ | CAN state: __DEBUG_CAN_STATUS__</div>
+    <div>CAN TWAI state: __DEBUG_CAN_STATE__ | TX err: __DEBUG_CAN_TX_ERR__ | RX err: __DEBUG_CAN_RX_ERR__</div>
+    <div>CAN bus err: __DEBUG_CAN_BUS_ERR__ | Arb lost: __DEBUG_CAN_ARB_LOST__ | Queue: __DEBUG_CAN_QUEUE__</div>
+    <div>CAN tx: __DEBUG_CAN_TX__ | CAN tx fail: __DEBUG_CAN_TX_FAIL__</div>
+    <div style='margin-top:6px;font-family:monospace;word-break:break-all'>Last frame: __DEBUG_LAST_FRAME__</div>
+  </div>
 </div>
 __RAW_REGS__
 <script>

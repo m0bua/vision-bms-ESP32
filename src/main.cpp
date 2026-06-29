@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <driver/twai.h>
+#include <stdarg.h>
 
 #if __has_include("config.h")
 #include "config.h"
@@ -15,6 +16,24 @@
 constexpr uint8_t BMS_REG_COUNT = 0x24; // 0x0000..0x0023
 constexpr size_t BMS_RAW_REGS = BMS_REG_COUNT;
 constexpr size_t JSON_DOC_CAPACITY = 12288;
+
+#ifndef ENABLE_DEBUG_SERIAL
+constexpr bool ENABLE_DEBUG_SERIAL = true;
+#endif
+
+#ifndef ENABLE_DEBUG_RAW_FRAMES
+constexpr bool ENABLE_DEBUG_RAW_FRAMES = true;
+#endif
+
+enum class BmsFailReason : uint8_t
+{
+  None = 0,
+  ShortFrame,
+  SlaveMismatch,
+  FunctionMismatch,
+  CrcMismatch,
+  LengthMismatch,
+};
 
 struct BmsSnapshot
 {
@@ -62,6 +81,36 @@ extern const char UI_SHARED_CSS[] PROGMEM;
 extern const char UI_SHARED_JS[] PROGMEM;
 extern const char INDEX_HTML[] PROGMEM;
 extern const char DIAG_HTML[] PROGMEM;
+
+struct BmsDebugState
+{
+  uint32_t pollCount = 0;
+  uint32_t successCount = 0;
+  uint32_t failCount = 0;
+  uint32_t shortFrameCount = 0;
+  uint32_t slaveMismatchCount = 0;
+  uint32_t functionMismatchCount = 0;
+  uint32_t crcMismatchCount = 0;
+  uint32_t lengthMismatchCount = 0;
+  uint32_t lastPollStartMs = 0;
+  uint32_t lastPollDurationMs = 0;
+  uint32_t lastSuccessMs = 0;
+  uint16_t lastFrameLen = 0;
+  BmsFailReason lastFailReason = BmsFailReason::None;
+  uint8_t lastResponse[80] = {0};
+  uint8_t lastResponseLen = 0;
+  bool canDriverInstalled = false;
+  bool canStarted = false;
+  esp_err_t canInitResult = ESP_FAIL;
+  esp_err_t canStartResult = ESP_FAIL;
+  uint32_t canTxCount = 0;
+  uint32_t canTxFail = 0;
+  esp_err_t lastCanTxResult = ESP_OK;
+  esp_err_t canStatusResult = ESP_FAIL;
+  twai_status_info_t canStatus = {};
+};
+
+BmsDebugState dbg;
 
 bool wifiConnected()
 {
@@ -118,6 +167,94 @@ String formatHex16(uint16_t value)
   char buf[8];
   snprintf(buf, sizeof(buf), "0x%04X", value);
   return String(buf);
+}
+
+String formatByteBuffer(const uint8_t *buf, size_t len)
+{
+  String out;
+  for (size_t i = 0; i < len; i++)
+  {
+    if (i > 0)
+      out += ' ';
+    char tmp[4];
+    snprintf(tmp, sizeof(tmp), "%02X", buf[i]);
+    out += tmp;
+  }
+  return out;
+}
+
+String failReasonText(BmsFailReason reason)
+{
+  switch (reason)
+  {
+  case BmsFailReason::ShortFrame:
+    return "short frame";
+  case BmsFailReason::SlaveMismatch:
+    return "slave id mismatch";
+  case BmsFailReason::FunctionMismatch:
+    return "function mismatch";
+  case BmsFailReason::CrcMismatch:
+    return "CRC mismatch";
+  case BmsFailReason::LengthMismatch:
+    return "length mismatch";
+  case BmsFailReason::None:
+  default:
+    return "none";
+  }
+}
+
+void debugPrintf(const char *fmt, ...)
+{
+  if (!ENABLE_DEBUG_SERIAL)
+  {
+    return;
+  }
+
+  char buffer[256];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buffer, sizeof(buffer), fmt, args);
+  va_end(args);
+  Serial.println(buffer);
+}
+
+String canStateText(twai_state_t state)
+{
+  switch (state)
+  {
+  case TWAI_STATE_STOPPED:
+    return "stopped";
+  case TWAI_STATE_RUNNING:
+    return "running";
+  case TWAI_STATE_BUS_OFF:
+    return "bus-off";
+  case TWAI_STATE_RECOVERING:
+    return "recovering";
+  default:
+    return "unknown";
+  }
+}
+
+void refreshCanStatus()
+{
+  if (!ENABLE_DEYE_CAN || !dbg.canStarted)
+  {
+    return;
+  }
+
+  dbg.canStatusResult = twai_get_status_info(&dbg.canStatus);
+  if (dbg.canStatusResult == ESP_OK && ENABLE_DEBUG_SERIAL)
+  {
+    debugPrintf("[CAN] state=%s tx_err=%u rx_err=%u tx_fail=%u rx_missed=%u bus_err=%u arb_lost=%u queue=%u",
+                canStateText(dbg.canStatus.state).c_str(),
+                dbg.canStatus.tx_error_counter,
+                dbg.canStatus.rx_error_counter,
+                dbg.canStatus.tx_failed_count,
+                dbg.canStatus.rx_missed_count,
+                dbg.canStatus.bus_error_count,
+                dbg.canStatus.arb_lost_count,
+                dbg.canStatus.msgs_to_tx);
+  }
 }
 
 const char *rawRegisterName(uint8_t index)
@@ -418,6 +555,39 @@ void clearSnapshotData()
   bms.crcCalculated = 0;
 }
 
+void recordBmsFailure(BmsFailReason reason, const uint8_t *frame = nullptr, uint8_t frameLen = 0)
+{
+  dbg.failCount++;
+  dbg.lastFailReason = reason;
+  dbg.lastFrameLen = frameLen;
+  if (frame != nullptr && frameLen > 0)
+  {
+    dbg.lastResponseLen = min<uint8_t>(frameLen, sizeof(dbg.lastResponse));
+    memcpy(dbg.lastResponse, frame, dbg.lastResponseLen);
+  }
+  switch (reason)
+  {
+  case BmsFailReason::ShortFrame:
+    dbg.shortFrameCount++;
+    break;
+  case BmsFailReason::SlaveMismatch:
+    dbg.slaveMismatchCount++;
+    break;
+  case BmsFailReason::FunctionMismatch:
+    dbg.functionMismatchCount++;
+    break;
+  case BmsFailReason::CrcMismatch:
+    dbg.crcMismatchCount++;
+    break;
+  case BmsFailReason::LengthMismatch:
+    dbg.lengthMismatchCount++;
+    break;
+  case BmsFailReason::None:
+  default:
+    break;
+  }
+}
+
 void decodeSnapshot()
 {
   bms.packV = roundTo2(bms.rawRegs[0] / 100.0f);
@@ -466,6 +636,8 @@ void decodeSnapshot()
 
 bool requestBmsData(uint8_t slaveId)
 {
+  dbg.pollCount++;
+  dbg.lastPollStartMs = millis();
   bms.lastTriedSlaveId = slaveId;
 
   while (Serial2.available())
@@ -497,10 +669,20 @@ bool requestBmsData(uint8_t slaveId)
     delay(1);
   }
 
+  dbg.lastPollDurationMs = millis() - dbg.lastPollStartMs;
+  dbg.lastFrameLen = idx;
+  dbg.lastResponseLen = min<uint8_t>(idx, sizeof(dbg.lastResponse));
+  if (dbg.lastResponseLen > 0)
+  {
+    memcpy(dbg.lastResponse, res, dbg.lastResponseLen);
+  }
+
   if (idx < 5)
   {
     bms.errorCount++;
+    recordBmsFailure(BmsFailReason::ShortFrame, res, (uint8_t)idx);
     clearSnapshotData();
+    debugPrintf("[BMS] slave=%u fail=short frame len=%d poll=%lu ms", slaveId, idx, dbg.lastPollDurationMs);
     return false;
   }
 
@@ -513,6 +695,14 @@ bool requestBmsData(uint8_t slaveId)
   if (bms.rawSlaveId != slaveId || bms.rawFunction != 0x03)
   {
     bms.errorCount++;
+    recordBmsFailure(bms.rawSlaveId != slaveId ? BmsFailReason::SlaveMismatch : BmsFailReason::FunctionMismatch, res, (uint8_t)idx);
+    debugPrintf("[BMS] slave=%u fail=%s rx_slave=%u rx_fn=0x%02X len=%d frame=%s",
+                slaveId,
+                bms.rawSlaveId != slaveId ? "slave id mismatch" : "function mismatch",
+                bms.rawSlaveId,
+                bms.rawFunction,
+                idx,
+                ENABLE_DEBUG_RAW_FRAMES ? formatByteBuffer(res, idx).c_str() : "");
     clearSnapshotData();
     return false;
   }
@@ -520,6 +710,13 @@ bool requestBmsData(uint8_t slaveId)
   if (bms.crcReceived != bms.crcCalculated)
   {
     bms.errorCount++;
+    recordBmsFailure(BmsFailReason::CrcMismatch, res, (uint8_t)idx);
+    debugPrintf("[BMS] slave=%u fail=crc mismatch rx=%s calc=%s len=%d frame=%s",
+                slaveId,
+                formatHex16(bms.crcReceived).c_str(),
+                formatHex16(bms.crcCalculated).c_str(),
+                idx,
+                ENABLE_DEBUG_RAW_FRAMES ? formatByteBuffer(res, idx).c_str() : "");
     clearSnapshotData();
     return false;
   }
@@ -528,6 +725,12 @@ bool requestBmsData(uint8_t slaveId)
   if (idx < expectedBytes)
   {
     bms.errorCount++;
+    recordBmsFailure(BmsFailReason::LengthMismatch, res, (uint8_t)idx);
+    debugPrintf("[BMS] slave=%u fail=length mismatch rx=%d expected=%d frame=%s",
+                slaveId,
+                idx,
+                expectedBytes,
+                ENABLE_DEBUG_RAW_FRAMES ? formatByteBuffer(res, idx).c_str() : "");
     clearSnapshotData();
     return false;
   }
@@ -543,6 +746,20 @@ bool requestBmsData(uint8_t slaveId)
   bms.errorCount = 0;
   bms.lastUpdateMs = millis();
   bms.activeSlaveId = slaveId;
+  dbg.successCount++;
+  dbg.lastSuccessMs = millis();
+  dbg.lastFailReason = BmsFailReason::None;
+  if (ENABLE_DEBUG_SERIAL)
+  {
+    debugPrintf("[BMS] slave=%u ok len=%d poll=%lu ms V=%.2f I=%.2f SOC=%d raw=%s",
+                slaveId,
+                idx,
+                dbg.lastPollDurationMs,
+                bms.packV,
+                bms.current,
+                bms.soc,
+                ENABLE_DEBUG_RAW_FRAMES ? formatByteBuffer(res, idx).c_str() : "");
+  }
   return true;
 }
 
@@ -552,6 +769,7 @@ void sendCanFrame(uint32_t id, uint8_t len, uint8_t *data)
   {
     return;
   }
+  dbg.canTxCount++;
   twai_message_t message = {};
   message.identifier = id;
   message.extd = 0;
@@ -560,7 +778,21 @@ void sendCanFrame(uint32_t id, uint8_t len, uint8_t *data)
   {
     message.data[i] = data[i];
   }
-  twai_transmit(&message, pdMS_TO_TICKS(10));
+  dbg.lastCanTxResult = twai_transmit(&message, pdMS_TO_TICKS(10));
+  if (dbg.lastCanTxResult != ESP_OK)
+  {
+    dbg.canTxFail++;
+    if (ENABLE_DEBUG_SERIAL)
+    {
+      debugPrintf("[CAN] tx fail id=0x%03lX err=%d", (unsigned long)id, (int)dbg.lastCanTxResult);
+    }
+    refreshCanStatus();
+    if (dbg.canStatusResult == ESP_OK && dbg.canStatus.state == TWAI_STATE_BUS_OFF)
+    {
+      esp_err_t recovery = twai_initiate_recovery();
+      debugPrintf("[CAN] bus-off recovery start: %d", (int)recovery);
+    }
+  }
 }
 
 void sendDeyeCanTelemetry()
@@ -631,6 +863,24 @@ String buildDiagHtml(uint16_t refreshSeconds)
   html.replace("__CELL_COUNT__", String(bms.cellCount ? bms.cellCount : 15));
   html.replace("__CRC_RX__", formatHex16(bms.crcReceived));
   html.replace("__CRC_CALC__", formatHex16(bms.crcCalculated));
+  html.replace("__DEBUG_POLL_COUNT__", String(dbg.pollCount));
+  html.replace("__DEBUG_SUCCESS_COUNT__", String(dbg.successCount));
+  html.replace("__DEBUG_FAIL_COUNT__", String(dbg.failCount));
+  html.replace("__DEBUG_LAST_FAIL__", failReasonText(dbg.lastFailReason));
+  html.replace("__DEBUG_LAST_POLL_MS__", String(dbg.lastPollDurationMs));
+  html.replace("__DEBUG_LAST_FRAME_LEN__", String(dbg.lastFrameLen));
+  html.replace("__DEBUG_LAST_FRAME__", ENABLE_DEBUG_RAW_FRAMES ? formatByteBuffer(dbg.lastResponse, dbg.lastResponseLen) : String("disabled"));
+  html.replace("__DEBUG_CAN_INIT__", String((int)dbg.canInitResult));
+  html.replace("__DEBUG_CAN_START__", String((int)dbg.canStartResult));
+  html.replace("__DEBUG_CAN_STATUS__", dbg.canStarted ? "started" : (ENABLE_DEYE_CAN ? "not started" : "disabled"));
+  html.replace("__DEBUG_CAN_STATE__", dbg.canStatusResult == ESP_OK ? canStateText(dbg.canStatus.state) : "unknown");
+  html.replace("__DEBUG_CAN_TX_ERR__", String(dbg.canStatus.tx_error_counter));
+  html.replace("__DEBUG_CAN_RX_ERR__", String(dbg.canStatus.rx_error_counter));
+  html.replace("__DEBUG_CAN_BUS_ERR__", String(dbg.canStatus.bus_error_count));
+  html.replace("__DEBUG_CAN_ARB_LOST__", String(dbg.canStatus.arb_lost_count));
+  html.replace("__DEBUG_CAN_QUEUE__", String(dbg.canStatus.msgs_to_tx));
+  html.replace("__DEBUG_CAN_TX__", String(dbg.canTxCount));
+  html.replace("__DEBUG_CAN_TX_FAIL__", String(dbg.canTxFail));
   html.replace("__RAW_REGS__", buildDiagRawRegistersHtml());
   return html;
 }
@@ -679,6 +929,34 @@ void fillTelemetryJson(JsonObject root)
   JsonObject crc = diagnostics.createNestedObject("crc");
   crc["received"] = bms.crcReceived;
   crc["calculated"] = bms.crcCalculated;
+  JsonObject debug = diagnostics.createNestedObject("debug");
+  debug["poll_count"] = dbg.pollCount;
+  debug["success_count"] = dbg.successCount;
+  debug["fail_count"] = dbg.failCount;
+  debug["short_frame_count"] = dbg.shortFrameCount;
+  debug["slave_mismatch_count"] = dbg.slaveMismatchCount;
+  debug["function_mismatch_count"] = dbg.functionMismatchCount;
+  debug["crc_mismatch_count"] = dbg.crcMismatchCount;
+  debug["length_mismatch_count"] = dbg.lengthMismatchCount;
+  debug["last_poll_duration_ms"] = dbg.lastPollDurationMs;
+  debug["last_success_ms"] = dbg.lastSuccessMs;
+  debug["last_frame_len"] = dbg.lastFrameLen;
+  debug["last_fail_reason"] = failReasonText(dbg.lastFailReason);
+  debug["last_frame_hex"] = ENABLE_DEBUG_RAW_FRAMES ? formatByteBuffer(dbg.lastResponse, dbg.lastResponseLen) : "";
+  debug["can_driver_installed"] = dbg.canDriverInstalled;
+  debug["can_started"] = dbg.canStarted;
+  debug["can_init_result"] = (int)dbg.canInitResult;
+  debug["can_start_result"] = (int)dbg.canStartResult;
+  debug["can_tx_count"] = dbg.canTxCount;
+  debug["can_tx_fail"] = dbg.canTxFail;
+  debug["can_last_tx_result"] = (int)dbg.lastCanTxResult;
+  debug["can_status_result"] = (int)dbg.canStatusResult;
+  debug["can_state"] = dbg.canStatusResult == ESP_OK ? canStateText(dbg.canStatus.state) : "unknown";
+  debug["can_tx_error_counter"] = dbg.canStatus.tx_error_counter;
+  debug["can_rx_error_counter"] = dbg.canStatus.rx_error_counter;
+  debug["can_bus_error_count"] = dbg.canStatus.bus_error_count;
+  debug["can_arb_lost_count"] = dbg.canStatus.arb_lost_count;
+  debug["can_msgs_to_tx"] = dbg.canStatus.msgs_to_tx;
 
   JsonObject pack = root.createNestedObject("pack");
   pack["voltage_v"] = serialized(formatJsonFloat(bms.packV));
@@ -729,6 +1007,9 @@ void handleJson()
 void setup()
 {
   Serial.begin(115200);
+  delay(200);
+  debugPrintf("[BOOT] starting");
+  debugPrintf("[BOOT] BMS RX=%u TX=%u DE=%u CAN RX=%u TX=%u", BMS_RX_PIN, BMS_TX_PIN, BMS_DE_PIN, CAN_RX_PIN, CAN_TX_PIN);
   Serial2.begin(9600, SERIAL_8N1, BMS_RX_PIN, BMS_TX_PIN);
   pinMode(BMS_DE_PIN, OUTPUT);
   digitalWrite(BMS_DE_PIN, LOW);
@@ -738,10 +1019,20 @@ void setup()
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT((gpio_num_t)CAN_TX_PIN, (gpio_num_t)CAN_RX_PIN, TWAI_MODE_NORMAL);
     twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-    if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK)
+    dbg.canInitResult = twai_driver_install(&g_config, &t_config, &f_config);
+    dbg.canDriverInstalled = (dbg.canInitResult == ESP_OK);
+    debugPrintf("[CAN] driver install: %d", (int)dbg.canInitResult);
+    if (dbg.canDriverInstalled)
     {
-      twai_start();
+      dbg.canStartResult = twai_start();
+      dbg.canStarted = (dbg.canStartResult == ESP_OK);
+      debugPrintf("[CAN] start: %d", (int)dbg.canStartResult);
+      refreshCanStatus();
     }
+  }
+  else
+  {
+    debugPrintf("[CAN] disabled in config");
   }
 
   WiFi.mode(WIFI_STA);
@@ -754,11 +1045,13 @@ void setup()
     WiFi.setScanMethod(WIFI_FAST_SCAN);
   }
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  debugPrintf("[WIFI] connecting to SSID='%s' hidden=%d", WIFI_SSID, WIFI_SSID_HIDDEN ? 1 : 0);
 
   server.on("/", handleRoot);
   server.on("/diag", handleDiag);
   server.on("/json", handleJson);
   server.begin();
+  debugPrintf("[HTTP] server started");
 }
 
 void loop()
@@ -784,18 +1077,19 @@ void loop()
   if (millis() - lastLog >= 3000)
   {
     lastLog = millis();
-    Serial.print("BMS ");
-    Serial.print(bms.online ? "ONLINE" : "OFFLINE");
-    Serial.print(" active_id=");
-    Serial.print(bms.activeSlaveId);
-    Serial.print(" tried_id=");
-    Serial.print(bms.lastTriedSlaveId);
-    Serial.print(" err=");
-    Serial.print(bms.errorCount);
-    Serial.print(" crc=");
-    Serial.print(formatHex16(bms.crcReceived));
-    Serial.print("/");
-    Serial.println(formatHex16(bms.crcCalculated));
+    refreshCanStatus();
+    debugPrintf("[STAT] bms=%s active=%u tried=%u err=%d polls=%lu ok=%lu fail=%lu last_fail=%s can=%s tx=%lu/%lu",
+                bms.online ? "ONLINE" : "OFFLINE",
+                bms.activeSlaveId,
+                bms.lastTriedSlaveId,
+                bms.errorCount,
+                dbg.pollCount,
+                dbg.successCount,
+                dbg.failCount,
+                failReasonText(dbg.lastFailReason).c_str(),
+                (ENABLE_DEYE_CAN ? (dbg.canStarted ? "started" : "init-failed") : "disabled"),
+                dbg.canTxCount,
+                dbg.canTxFail);
   }
 
   if (ENABLE_DEYE_CAN && bms.online)
