@@ -1,21 +1,24 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <DNSServer.h>
+#include <Preferences.h>
 #include <WiFi.h>
 #include <WebServer.h>
 #include <driver/twai.h>
 #include <stdarg.h>
-
-#if __has_include("config.h")
-#include "config.h"
-#elif __has_include("config.h.example")
-#include "config.h.example"
-#else
-#error "Missing config.h or config.h.example"
-#endif
+#include <cstring>
 
 constexpr uint8_t BMS_REG_COUNT = 0x24; // 0x0000..0x0023
 constexpr size_t BMS_RAW_REGS = BMS_REG_COUNT;
 constexpr size_t JSON_DOC_CAPACITY = 12288;
+constexpr uint32_t CONFIG_MAGIC = 0x424D5301UL;
+constexpr uint16_t CONFIG_VERSION = 1;
+constexpr char CONFIG_NAMESPACE[] = "bmscfg";
+constexpr char AP_SSID[] = "BMS";
+const IPAddress AP_IP(192, 168, 0, 1);
+const IPAddress AP_MASK(255, 255, 255, 0);
+constexpr unsigned long WIFI_CONNECT_TIMEOUT_MS = 15000UL;
+constexpr size_t CUSTOM_CSS_MAX_LEN = 1536;
 
 #ifndef ENABLE_DEBUG_SERIAL
 constexpr bool ENABLE_DEBUG_SERIAL = true;
@@ -34,6 +37,34 @@ enum class BmsFailReason : uint8_t
   CrcMismatch,
   LengthMismatch,
 };
+
+struct RuntimeConfig
+{
+  char wifiSsid[33];
+  char wifiPassword[65];
+  bool wifiHidden;
+
+  uint8_t bmsDePin;
+  uint8_t bmsRxPin;
+  uint8_t bmsTxPin;
+  uint8_t canRxPin;
+  uint8_t canTxPin;
+  bool enableDeyeCan;
+
+  uint8_t preferredBmsId;
+  uint8_t bmsIdMin;
+  uint8_t bmsIdMax;
+
+  char customCss[CUSTOM_CSS_MAX_LEN];
+};
+
+RuntimeConfig cfg;
+Preferences configPrefs;
+DNSServer dnsServer;
+bool portalActive = false;
+bool configLoaded = false;
+bool rebootPending = false;
+unsigned long rebootAtMs = 0;
 
 struct BmsSnapshot
 {
@@ -78,11 +109,14 @@ struct BmsSnapshot
 BmsSnapshot bms;
 WebServer server(80);
 extern const char UI_THEME_BASE_VARS[] PROGMEM;
-extern const char UI_THEME_CUSTOM_VARS[] PROGMEM;
 extern const char UI_SHARED_CSS[] PROGMEM;
 extern const char UI_SHARED_JS[] PROGMEM;
 extern const char INDEX_HTML[] PROGMEM;
 extern const char DIAG_HTML[] PROGMEM;
+extern const char SETUP_HTML[] PROGMEM;
+
+void handleSetup();
+void handleDashboard();
 
 struct BmsDebugState
 {
@@ -201,6 +235,166 @@ String formatByteBuffer(const uint8_t *buf, size_t len)
   return out;
 }
 
+String htmlEscape(const String &input)
+{
+  String out;
+  out.reserve(input.length() * 2);
+  for (size_t i = 0; i < input.length(); i++)
+  {
+    char ch = input[i];
+    switch (ch)
+    {
+    case '&':
+      out += "&amp;";
+      break;
+    case '<':
+      out += "&lt;";
+      break;
+    case '>':
+      out += "&gt;";
+      break;
+    case '"':
+      out += "&quot;";
+      break;
+    case '\'':
+      out += "&#39;";
+      break;
+    default:
+      out += ch;
+      break;
+    }
+  }
+  return out;
+}
+
+template <size_t N>
+void copyStringField(char (&dest)[N], const String &value)
+{
+  snprintf(dest, N, "%s", value.c_str());
+}
+
+uint8_t clampPinValue(int value)
+{
+  if (value < 0)
+    return 0;
+  if (value > 39)
+    return 39;
+  return (uint8_t)value;
+}
+
+void setDefaultConfig()
+{
+  memset(&cfg, 0, sizeof(cfg));
+  cfg.wifiHidden = false;
+  cfg.bmsDePin = 4;
+  cfg.bmsRxPin = 16;
+  cfg.bmsTxPin = 17;
+  cfg.canRxPin = 18;
+  cfg.canTxPin = 19;
+  cfg.enableDeyeCan = true;
+  cfg.preferredBmsId = 16;
+  cfg.bmsIdMin = 1;
+  cfg.bmsIdMax = 16;
+  cfg.customCss[0] = '\0';
+}
+
+void sanitizeConfig()
+{
+  cfg.bmsDePin = clampPinValue(cfg.bmsDePin);
+  cfg.bmsRxPin = clampPinValue(cfg.bmsRxPin);
+  cfg.bmsTxPin = clampPinValue(cfg.bmsTxPin);
+  cfg.canRxPin = clampPinValue(cfg.canRxPin);
+  cfg.canTxPin = clampPinValue(cfg.canTxPin);
+
+  if (cfg.bmsIdMin == 0)
+    cfg.bmsIdMin = 1;
+  if (cfg.bmsIdMax == 0)
+    cfg.bmsIdMax = 16;
+  if (cfg.bmsIdMin > cfg.bmsIdMax)
+  {
+    uint8_t swapValue = cfg.bmsIdMin;
+    cfg.bmsIdMin = cfg.bmsIdMax;
+    cfg.bmsIdMax = swapValue;
+  }
+  if (cfg.preferredBmsId < cfg.bmsIdMin || cfg.preferredBmsId > cfg.bmsIdMax)
+  {
+    cfg.preferredBmsId = cfg.bmsIdMax;
+  }
+  cfg.customCss[CUSTOM_CSS_MAX_LEN - 1] = '\0';
+}
+
+bool loadConfig()
+{
+  setDefaultConfig();
+  if (!configPrefs.begin(CONFIG_NAMESPACE, true))
+  {
+    return false;
+  }
+
+  const uint32_t magic = configPrefs.getUInt("magic", 0);
+  const uint16_t version = configPrefs.getUShort("version", 0);
+  if (magic != CONFIG_MAGIC || version != CONFIG_VERSION)
+  {
+    configPrefs.end();
+    sanitizeConfig();
+    return false;
+  }
+
+  String wifiSsid = configPrefs.getString("wifi_ssid", "");
+  String wifiPassword = configPrefs.getString("wifi_password", "");
+  String customCss = configPrefs.getString("custom_css", "");
+  wifiSsid.trim();
+  copyStringField(cfg.wifiSsid, wifiSsid);
+  copyStringField(cfg.wifiPassword, wifiPassword);
+  copyStringField(cfg.customCss, customCss);
+  cfg.wifiHidden = configPrefs.getBool("wifi_hidden", false);
+  cfg.bmsDePin = (uint8_t)configPrefs.getUChar("bms_de_pin", 4);
+  cfg.bmsRxPin = (uint8_t)configPrefs.getUChar("bms_rx_pin", 16);
+  cfg.bmsTxPin = (uint8_t)configPrefs.getUChar("bms_tx_pin", 17);
+  cfg.canRxPin = (uint8_t)configPrefs.getUChar("can_rx_pin", 18);
+  cfg.canTxPin = (uint8_t)configPrefs.getUChar("can_tx_pin", 19);
+  cfg.enableDeyeCan = configPrefs.getBool("enable_can", true);
+  cfg.preferredBmsId = (uint8_t)configPrefs.getUChar("pref_bms_id", 16);
+  cfg.bmsIdMin = (uint8_t)configPrefs.getUChar("bms_id_min", 1);
+  cfg.bmsIdMax = (uint8_t)configPrefs.getUChar("bms_id_max", 16);
+  configPrefs.end();
+
+  sanitizeConfig();
+  configLoaded = true;
+  return true;
+}
+
+void saveConfig()
+{
+  configPrefs.begin(CONFIG_NAMESPACE, false);
+  configPrefs.putUInt("magic", CONFIG_MAGIC);
+  configPrefs.putUShort("version", CONFIG_VERSION);
+  configPrefs.putString("wifi_ssid", cfg.wifiSsid);
+  configPrefs.putString("wifi_password", cfg.wifiPassword);
+  configPrefs.putBool("wifi_hidden", cfg.wifiHidden);
+  configPrefs.putUChar("bms_de_pin", cfg.bmsDePin);
+  configPrefs.putUChar("bms_rx_pin", cfg.bmsRxPin);
+  configPrefs.putUChar("bms_tx_pin", cfg.bmsTxPin);
+  configPrefs.putUChar("can_rx_pin", cfg.canRxPin);
+  configPrefs.putUChar("can_tx_pin", cfg.canTxPin);
+  configPrefs.putBool("enable_can", cfg.enableDeyeCan);
+  configPrefs.putUChar("pref_bms_id", cfg.preferredBmsId);
+  configPrefs.putUChar("bms_id_min", cfg.bmsIdMin);
+  configPrefs.putUChar("bms_id_max", cfg.bmsIdMax);
+  configPrefs.putString("custom_css", cfg.customCss);
+  configPrefs.end();
+  configLoaded = true;
+}
+
+void clearConfig()
+{
+  configPrefs.begin(CONFIG_NAMESPACE, false);
+  configPrefs.clear();
+  configPrefs.end();
+  setDefaultConfig();
+  configLoaded = false;
+}
+
 String failReasonText(BmsFailReason reason)
 {
   switch (reason)
@@ -255,7 +449,7 @@ String canStateText(twai_state_t state)
 
 void refreshCanStatus()
 {
-  if (!ENABLE_DEYE_CAN || !dbg.canStarted)
+  if (!cfg.enableDeyeCan || !dbg.canStarted)
   {
     return;
   }
@@ -682,12 +876,12 @@ bool requestBmsData(uint8_t slaveId)
   req[6] = crc & 0xFF;
   req[7] = (crc >> 8) & 0xFF;
 
-  digitalWrite(BMS_DE_PIN, HIGH);
+  digitalWrite(cfg.bmsDePin, HIGH);
   delayMicroseconds(50);
   Serial2.write(req, 8);
   Serial2.flush();
   delayMicroseconds(50);
-  digitalWrite(BMS_DE_PIN, LOW);
+  digitalWrite(cfg.bmsDePin, LOW);
 
   uint8_t res[80];
   int idx = 0;
@@ -797,7 +991,7 @@ bool requestBmsData(uint8_t slaveId)
 
 void sendCanFrame(uint32_t id, uint8_t len, uint8_t *data)
 {
-  if (!ENABLE_DEYE_CAN)
+  if (!cfg.enableDeyeCan)
   {
     return;
   }
@@ -829,7 +1023,7 @@ void sendCanFrame(uint32_t id, uint8_t len, uint8_t *data)
 
 void sendDeyeCanTelemetry()
 {
-  if (!ENABLE_DEYE_CAN || !bms.online)
+  if (!cfg.enableDeyeCan || !bms.online)
   {
     return;
   }
@@ -858,22 +1052,12 @@ void sendDeyeCanTelemetry()
   sendCanFrame(0x35F, 8, d35F);
 }
 
-void handleRoot()
-{
-  String html = FPSTR(INDEX_HTML);
-  html.replace("__UI_THEME_BASE_VARS__", String(FPSTR(UI_THEME_BASE_VARS)));
-  html.replace("__UI_THEME_CUSTOM_VARS__", String(FPSTR(UI_THEME_CUSTOM_VARS)));
-  html.replace("__UI_SHARED_CSS__", String(FPSTR(UI_SHARED_CSS)));
-  html.replace("__UI_SHARED_JS__", String(FPSTR(UI_SHARED_JS)));
-  server.send(200, "text/html", html);
-}
-
 String buildDiagHtml(uint16_t refreshSeconds)
 {
   String html = FPSTR(DIAG_HTML);
   html.replace("__UI_THEME_BASE_VARS__", String(FPSTR(UI_THEME_BASE_VARS)));
-  html.replace("__UI_THEME_CUSTOM_VARS__", String(FPSTR(UI_THEME_CUSTOM_VARS)));
   html.replace("__UI_SHARED_CSS__", String(FPSTR(UI_SHARED_CSS)));
+  html.replace("__CUSTOM_CSS__", String(cfg.customCss));
   html.replace("__REFRESH_META__", refreshSeconds > 0 ? String("<meta http-equiv='refresh' content='") + String(refreshSeconds) + "'>" : "");
   html.replace("__REFRESH_SECONDS__", String(refreshSeconds));
   html.replace("__REFRESH_STATE__", refreshSeconds > 0 ? String("on (") + String(refreshSeconds) + " s)" : "off");
@@ -906,7 +1090,7 @@ String buildDiagHtml(uint16_t refreshSeconds)
   html.replace("__DEBUG_TEMP_SENSOR_COUNT__", String(bms.tempSensorCount));
   html.replace("__DEBUG_CAN_INIT__", String((int)dbg.canInitResult));
   html.replace("__DEBUG_CAN_START__", String((int)dbg.canStartResult));
-  html.replace("__DEBUG_CAN_STATUS__", dbg.canStarted ? "started" : (ENABLE_DEYE_CAN ? "not started" : "disabled"));
+  html.replace("__DEBUG_CAN_STATUS__", dbg.canStarted ? "started" : (cfg.enableDeyeCan ? "not started" : "disabled"));
   html.replace("__DEBUG_CAN_STATE__", dbg.canStatusResult == ESP_OK ? canStateText(dbg.canStatus.state) : "unknown");
   html.replace("__DEBUG_CAN_TX_ERR__", String(dbg.canStatus.tx_error_counter));
   html.replace("__DEBUG_CAN_RX_ERR__", String(dbg.canStatus.rx_error_counter));
@@ -917,6 +1101,161 @@ String buildDiagHtml(uint16_t refreshSeconds)
   html.replace("__DEBUG_CAN_TX_FAIL__", String(dbg.canTxFail));
   html.replace("__RAW_REGS__", buildDiagRawRegistersHtml());
   return html;
+}
+
+String buildSetupHtml()
+{
+  String html = FPSTR(SETUP_HTML);
+  html.replace("__UI_THEME_BASE_VARS__", String(FPSTR(UI_THEME_BASE_VARS)));
+  html.replace("__UI_SHARED_CSS__", String(FPSTR(UI_SHARED_CSS)));
+  html.replace("__CUSTOM_CSS__", String(cfg.customCss));
+  html.replace("__STATUS__", portalActive
+                                   ? String("Access point is active on ") + AP_SSID + " (" + AP_IP.toString() + ")"
+                                   : String("Wi-Fi state: ") + (WiFi.status() == WL_CONNECTED ? String("connected as ") + WiFi.SSID() : String("not connected")));
+  if (WiFi.status() == WL_CONNECTED && cfg.wifiSsid[0] != '\0')
+  {
+    html.replace("__TOP_ACTION__", String("<div><a href='/'>Back to dashboard</a></div>"));
+  }
+  else
+  {
+    html.replace("__TOP_ACTION__", String("<div class='pill live'>") + (portalActive ? "AP mode" : "setup") + "</div>");
+  }
+  html.replace("__WIFI_SSID__", htmlEscape(String(cfg.wifiSsid)));
+  html.replace("__WIFI_HIDDEN_CHECKED__", cfg.wifiHidden ? "checked" : "");
+  html.replace("__ENABLE_CAN_CHECKED__", cfg.enableDeyeCan ? "checked" : "");
+  html.replace("__BMS_DE_PIN__", String(cfg.bmsDePin));
+  html.replace("__BMS_RX_PIN__", String(cfg.bmsRxPin));
+  html.replace("__BMS_TX_PIN__", String(cfg.bmsTxPin));
+  html.replace("__CAN_RX_PIN__", String(cfg.canRxPin));
+  html.replace("__CAN_TX_PIN__", String(cfg.canTxPin));
+  html.replace("__PREFERRED_BMS_ID__", String(cfg.preferredBmsId));
+  html.replace("__BMS_ID_MIN__", String(cfg.bmsIdMin));
+  html.replace("__BMS_ID_MAX__", String(cfg.bmsIdMax));
+  html.replace("__CUSTOM_CSS_TEXT__", htmlEscape(String(cfg.customCss)));
+  return html;
+}
+
+void handleDashboard()
+{
+  String html = FPSTR(INDEX_HTML);
+  html.replace("__UI_THEME_BASE_VARS__", String(FPSTR(UI_THEME_BASE_VARS)));
+  html.replace("__UI_SHARED_CSS__", String(FPSTR(UI_SHARED_CSS)));
+  html.replace("__CUSTOM_CSS__", String(cfg.customCss));
+  html.replace("__UI_SHARED_JS__", String(FPSTR(UI_SHARED_JS)));
+  server.send(200, "text/html", html);
+}
+
+void handleRoot()
+{
+  if (WiFi.status() != WL_CONNECTED || cfg.wifiSsid[0] == '\0')
+  {
+    handleSetup();
+    return;
+  }
+  handleDashboard();
+}
+
+void handleSetup()
+{
+  server.send(200, "text/html", buildSetupHtml());
+}
+
+void scheduleReboot(unsigned long delayMs = 1500UL)
+{
+  rebootPending = true;
+  rebootAtMs = millis() + delayMs;
+}
+
+void handleSave()
+{
+  if (server.method() != HTTP_POST)
+  {
+    server.send(405, "text/plain", "POST only");
+    return;
+  }
+
+  copyStringField(cfg.wifiSsid, server.arg("wifi_ssid"));
+  if (server.hasArg("wifi_password") && server.arg("wifi_password").length() > 0)
+  {
+    copyStringField(cfg.wifiPassword, server.arg("wifi_password"));
+  }
+  cfg.wifiHidden = server.hasArg("wifi_hidden");
+  cfg.enableDeyeCan = server.hasArg("enable_deye_can");
+  cfg.bmsDePin = clampPinValue(server.arg("bms_de_pin").toInt());
+  cfg.bmsRxPin = clampPinValue(server.arg("bms_rx_pin").toInt());
+  cfg.bmsTxPin = clampPinValue(server.arg("bms_tx_pin").toInt());
+  cfg.canRxPin = clampPinValue(server.arg("can_rx_pin").toInt());
+  cfg.canTxPin = clampPinValue(server.arg("can_tx_pin").toInt());
+  cfg.preferredBmsId = (uint8_t)server.arg("preferred_bms_id").toInt();
+  cfg.bmsIdMin = (uint8_t)server.arg("bms_id_min").toInt();
+  cfg.bmsIdMax = (uint8_t)server.arg("bms_id_max").toInt();
+  copyStringField(cfg.customCss, server.arg("custom_css"));
+  sanitizeConfig();
+  saveConfig();
+  debugPrintf("[CFG] saved ssid='%s' can=%d bms=%u range=%u..%u",
+              cfg.wifiSsid,
+              cfg.enableDeyeCan ? 1 : 0,
+              cfg.preferredBmsId,
+              cfg.bmsIdMin,
+              cfg.bmsIdMax);
+
+  String html;
+  html.reserve(512);
+  html += "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
+  html += "<meta http-equiv='refresh' content='2;url=/setup'>";
+  html += "<title>Saved</title><style>body{font-family:Arial,Helvetica,sans-serif;background:#121212;color:#f2f2f2;padding:24px}</style></head><body>";
+  html += "<h1>Saved</h1><p>Settings were saved. Rebooting now...</p></body></html>";
+  server.send(200, "text/html", html);
+  scheduleReboot();
+}
+
+void handleReset()
+{
+  if (server.method() != HTTP_POST)
+  {
+    server.send(405, "text/plain", "POST only");
+    return;
+  }
+  clearConfig();
+  debugPrintf("[CFG] cleared");
+  server.send(200, "text/plain", "Configuration cleared. Rebooting...");
+  scheduleReboot();
+}
+
+void handleNotFound()
+{
+  if (WiFi.status() != WL_CONNECTED || cfg.wifiSsid[0] == '\0')
+  {
+    handleSetup();
+    return;
+  }
+  server.send(404, "text/plain", "Not found");
+}
+
+void startPortal()
+{
+  if (portalActive)
+  {
+    return;
+  }
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAPConfig(AP_IP, AP_IP, AP_MASK);
+  WiFi.softAP(AP_SSID);
+  dnsServer.start(53, "*", AP_IP);
+  portalActive = true;
+  debugPrintf("[AP] started ssid=%s ip=%s", AP_SSID, AP_IP.toString().c_str());
+}
+
+void stopPortal()
+{
+  if (!portalActive)
+  {
+    return;
+  }
+  dnsServer.stop();
+  WiFi.softAPdisconnect(true);
+  portalActive = false;
+  debugPrintf("[AP] stopped");
 }
 
 void handleDiag()
@@ -1048,15 +1387,27 @@ void setup()
 {
   Serial.begin(115200);
   delay(200);
+  setDefaultConfig();
+  loadConfig();
+  sanitizeConfig();
+  debugPrintf("[CFG] loaded=%d ssid='%s' can=%d pins BMS[%u,%u,%u] CAN[%u,%u]",
+              configLoaded ? 1 : 0,
+              cfg.wifiSsid,
+              cfg.enableDeyeCan ? 1 : 0,
+              cfg.bmsDePin,
+              cfg.bmsRxPin,
+              cfg.bmsTxPin,
+              cfg.canRxPin,
+              cfg.canTxPin);
   debugPrintf("[BOOT] starting");
-  debugPrintf("[BOOT] BMS RX=%u TX=%u DE=%u CAN RX=%u TX=%u", BMS_RX_PIN, BMS_TX_PIN, BMS_DE_PIN, CAN_RX_PIN, CAN_TX_PIN);
-  Serial2.begin(9600, SERIAL_8N1, BMS_RX_PIN, BMS_TX_PIN);
-  pinMode(BMS_DE_PIN, OUTPUT);
-  digitalWrite(BMS_DE_PIN, LOW);
+  debugPrintf("[BOOT] BMS RX=%u TX=%u DE=%u CAN RX=%u TX=%u", cfg.bmsRxPin, cfg.bmsTxPin, cfg.bmsDePin, cfg.canRxPin, cfg.canTxPin);
+  Serial2.begin(9600, SERIAL_8N1, cfg.bmsRxPin, cfg.bmsTxPin);
+  pinMode(cfg.bmsDePin, OUTPUT);
+  digitalWrite(cfg.bmsDePin, LOW);
 
-  if (ENABLE_DEYE_CAN)
+  if (cfg.enableDeyeCan)
   {
-    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT((gpio_num_t)CAN_TX_PIN, (gpio_num_t)CAN_RX_PIN, TWAI_MODE_NORMAL);
+    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT((gpio_num_t)cfg.canTxPin, (gpio_num_t)cfg.canRxPin, TWAI_MODE_NORMAL);
     twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
     dbg.canInitResult = twai_driver_install(&g_config, &t_config, &f_config);
@@ -1075,21 +1426,46 @@ void setup()
     debugPrintf("[CAN] disabled in config");
   }
 
-  WiFi.mode(WIFI_STA);
-  if (WIFI_SSID_HIDDEN)
+  WiFi.persistent(false);
+  WiFi.setAutoReconnect(true);
+  if (cfg.wifiSsid[0] != '\0')
   {
-    WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+    WiFi.mode(WIFI_STA);
+    if (cfg.wifiHidden)
+    {
+      WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+    }
+    else
+    {
+      WiFi.setScanMethod(WIFI_FAST_SCAN);
+    }
+    WiFi.begin(cfg.wifiSsid, cfg.wifiPassword);
+    debugPrintf("[WIFI] connecting to SSID='%s' hidden=%d", cfg.wifiSsid, cfg.wifiHidden ? 1 : 0);
+    unsigned long wifiStart = millis();
+    while (millis() - wifiStart < WIFI_CONNECT_TIMEOUT_MS && WiFi.status() != WL_CONNECTED)
+    {
+      delay(250);
+      server.handleClient();
+    }
+    if (WiFi.status() != WL_CONNECTED)
+    {
+      debugPrintf("[WIFI] connect timeout, enabling AP fallback");
+      startPortal();
+    }
   }
   else
   {
-    WiFi.setScanMethod(WIFI_FAST_SCAN);
+    debugPrintf("[WIFI] no saved SSID, starting AP");
+    startPortal();
   }
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  debugPrintf("[WIFI] connecting to SSID='%s' hidden=%d", WIFI_SSID, WIFI_SSID_HIDDEN ? 1 : 0);
 
   server.on("/", handleRoot);
+  server.on("/setup", handleSetup);
+  server.on("/save", HTTP_POST, handleSave);
+  server.on("/reset", HTTP_POST, handleReset);
   server.on("/diag", handleDiag);
   server.on("/json", handleJson);
+  server.onNotFound(handleNotFound);
   server.begin();
   debugPrintf("[HTTP] server started");
 }
@@ -1098,7 +1474,22 @@ void loop()
 {
   static unsigned long lastPoll = 0;
   static unsigned long lastLog = 0;
-  static uint8_t scanId = PREFERRED_BMS_ID;
+  static uint8_t scanId = cfg.preferredBmsId;
+
+  if (rebootPending && millis() >= rebootAtMs)
+  {
+    ESP.restart();
+  }
+
+  if (portalActive)
+  {
+    dnsServer.processNextRequest();
+  }
+
+  if (portalActive && WiFi.status() == WL_CONNECTED && cfg.wifiSsid[0] != '\0')
+  {
+    stopPortal();
+  }
 
   if (millis() - lastPoll >= 3000)
   {
@@ -1106,9 +1497,9 @@ void loop()
     if (!ok && !bms.online)
     {
       scanId++;
-      if (scanId > BMS_ID_MAX)
+      if (scanId > cfg.bmsIdMax)
       {
-        scanId = BMS_ID_MIN;
+        scanId = cfg.bmsIdMin;
       }
     }
     lastPoll = millis();
@@ -1127,12 +1518,12 @@ void loop()
                 dbg.successCount,
                 dbg.failCount,
                 failReasonText(dbg.lastFailReason).c_str(),
-                (ENABLE_DEYE_CAN ? (dbg.canStarted ? "started" : "init-failed") : "disabled"),
+                (cfg.enableDeyeCan ? (dbg.canStarted ? "started" : "init-failed") : "disabled"),
                 dbg.canTxCount,
                 dbg.canTxFail);
   }
 
-  if (ENABLE_DEYE_CAN && bms.online)
+  if (cfg.enableDeyeCan && bms.online)
     sendDeyeCanTelemetry();
 
   server.handleClient();

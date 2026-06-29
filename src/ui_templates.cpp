@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include "ui_theme.h"
 
 extern const char UI_THEME_BASE_VARS[] PROGMEM = R"rawliteral(
   --bg:#121212;
@@ -84,7 +83,8 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
   <title>BMS Dashboard</title>
   <style>
     __UI_SHARED_CSS__
-    body{__UI_THEME_BASE_VARS____UI_THEME_CUSTOM_VARS__}
+    body{__UI_THEME_BASE_VARS__}
+    __CUSTOM_CSS__
     .wrap{max-width:1280px;margin:0 auto;padding:20px}
     .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px}
     h1{margin:0;font-size:28px}
@@ -183,6 +183,7 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
         <div class="row" style="justify-content:space-between">
           <div class="label">Links</div>
           <div class="row">
+            <a href="/setup">Settings</a>
             <a href="/json">JSON</a>
             <a href="/diag">Diagnostic</a>
           </div>
@@ -269,7 +270,8 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
 <meta name='viewport' content='width=device-width, initial-scale=1'>
 <style>
   __UI_SHARED_CSS__
-  body{__UI_THEME_BASE_VARS____UI_THEME_CUSTOM_VARS__padding:18px}
+  body{__UI_THEME_BASE_VARS__padding:18px}
+  __CUSTOM_CSS__
   #clickable{cursor:pointer;margin-bottom:.5em}
   .card{max-width:1200px;margin:0 auto 16px auto;padding:16px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
@@ -335,4 +337,173 @@ __RAW_REGS__
   });
 </script>
 </body></html>
+)rawliteral";
+
+extern const char SETUP_HTML[] PROGMEM = R"rawliteral(
+<!doctype html>
+<html lang='uk'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>BMS Setup</title>
+  <style>
+    __UI_SHARED_CSS__
+    body{__UI_THEME_BASE_VARS__padding:18px}
+    __CUSTOM_CSS__
+    .wrap{max-width:1100px;margin:0 auto}
+    .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px}
+    h1{margin:0;font-size:30px}
+    .sub{color:var(--muted);margin-top:6px}
+    .card{padding:18px}
+    .banner{margin-bottom:16px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,0.03)}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+    .section{grid-column:span 12;padding:16px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,0.02)}
+    .section-title{margin:0 0 14px 0;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+    .section-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+    .field{grid-column:span 6;display:flex;flex-direction:column;gap:8px}
+    .field.third{grid-column:span 4}
+    .field.half{grid-column:span 6}
+    .field.full{grid-column:span 12}
+    .field.toggle{justify-content:flex-start}
+    label{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+    input[type=text],input[type=password],input[type=number],textarea{
+      width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);
+      background:var(--panel2);color:var(--text);font:inherit;outline:none;
+    }
+    textarea{min-height:160px;resize:vertical;font-family:monospace}
+    .check{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel2);min-height:48px}
+    .actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}
+    .footer-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-start;margin-top:18px}
+    .btn{appearance:none;border:1px solid var(--line);background:var(--accent);color:#0f1112;padding:12px 18px;border-radius:12px;font:inherit;font-weight:700;cursor:pointer}
+    .btn.secondary{background:transparent;color:var(--text)}
+    .note{font-size:12px;color:var(--muted);margin-top:4px}
+    @media (max-width:900px){.field,.field.third,.field.half{grid-column:span 12}}
+  </style>
+</head>
+<body>
+  <div class='wrap'>
+    <div class='hero'>
+      <div>
+        <h1>BMS Setup</h1>
+      </div>
+      __TOP_ACTION__
+    </div>
+
+    <div class='banner'>__STATUS__</div>
+
+    <form method='post' action='/save'>
+      <div class='card'>
+        <div class='grid'>
+          <section class='section'>
+            <h2 class='section-title'>WiFi</h2>
+            <div class='section-grid'>
+              <div class='field third'>
+                <label for='wifi_ssid'>Wi-Fi SSID</label>
+                <input id='wifi_ssid' name='wifi_ssid' type='text' value='__WIFI_SSID__' autocomplete='off'>
+              </div>
+              <div class='field third'>
+                <label for='wifi_password'>Wi-Fi password</label>
+                <input id='wifi_password' name='wifi_password' type='password' value='' autocomplete='new-password' placeholder='leave blank to keep current'>
+                <div class='note'>Empty password keeps the stored one.</div>
+              </div>
+              <div class='field third'>
+                <label for='wifi_hidden'>Search hidden networks</label>
+                <div class='check'>
+                  <input id='wifi_hidden' name='wifi_hidden' type='checkbox' __WIFI_HIDDEN_CHECKED__>
+                  <span class='note' style='margin:0'>Scan hidden SSIDs</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class='section'>
+            <h2 class='section-title'>BMS</h2>
+            <div class='section-grid'>
+              <div class='field third'>
+                <label for='bms_de_pin'>BMS DE pin</label>
+                <input id='bms_de_pin' name='bms_de_pin' type='number' min='0' max='39' value='__BMS_DE_PIN__'>
+              </div>
+              <div class='field third'>
+                <label for='bms_rx_pin'>BMS RX pin</label>
+                <input id='bms_rx_pin' name='bms_rx_pin' type='number' min='0' max='39' value='__BMS_RX_PIN__'>
+              </div>
+              <div class='field third'>
+                <label for='bms_tx_pin'>BMS TX pin</label>
+                <input id='bms_tx_pin' name='bms_tx_pin' type='number' min='0' max='39' value='__BMS_TX_PIN__'>
+              </div>
+            </div>
+          </section>
+
+          <section class='section'>
+            <h2 class='section-title'>BMS ID</h2>
+            <div class='section-grid'>
+              <div class='field third'>
+                <label for='preferred_bms_id'>Preferred BMS ID</label>
+                <input id='preferred_bms_id' name='preferred_bms_id' type='number' min='1' max='16' value='__PREFERRED_BMS_ID__'>
+              </div>
+              <div class='field third'>
+                <label for='bms_id_min'>BMS ID min</label>
+                <input id='bms_id_min' name='bms_id_min' type='number' min='1' max='16' value='__BMS_ID_MIN__'>
+              </div>
+              <div class='field third'>
+                <label for='bms_id_max'>BMS ID max</label>
+                <input id='bms_id_max' name='bms_id_max' type='number' min='1' max='16' value='__BMS_ID_MAX__'>
+              </div>
+            </div>
+          </section>
+
+          <section class='section'>
+            <h2 class='section-title'>CAN</h2>
+            <div class='section-grid'>
+              <div class='field third toggle'>
+                <label for='enable_deye_can'>Enable Deye CAN</label>
+                <div class='check'>
+                  <input id='enable_deye_can' name='enable_deye_can' type='checkbox' __ENABLE_CAN_CHECKED__>
+                  <span class='note' style='margin:0'>Enable CAN output to Deye</span>
+                </div>
+              </div>
+              <div class='field third can-pin'>
+                <label for='can_rx_pin'>CAN RX pin</label>
+                <input id='can_rx_pin' name='can_rx_pin' type='number' min='0' max='39' value='__CAN_RX_PIN__'>
+              </div>
+              <div class='field third can-pin'>
+                <label for='can_tx_pin'>CAN TX pin</label>
+                <input id='can_tx_pin' name='can_tx_pin' type='number' min='0' max='39' value='__CAN_TX_PIN__'>
+              </div>
+            </div>
+          </section>
+
+          <section class='section'>
+            <h2 class='section-title'>CSS</h2>
+            <div class='section-grid'>
+              <div class='field full'>
+                <label for='custom_css'>Custom CSS</label>
+                <textarea id='custom_css' name='custom_css' placeholder='Add extra CSS rules here...'>__CUSTOM_CSS_TEXT__</textarea>
+              </div>
+            </div>
+          </section>
+        </div>
+        <div class='footer-actions'>
+          <button class='btn' type='submit'>Save & reboot</button>
+          <button class='btn secondary' type='submit' formaction='/reset' formmethod='post'>Reset saved config</button>
+        </div>
+      </div>
+    </form>
+  </div>
+  <script>
+    const canToggle = document.getElementById('enable_deye_can');
+    const canPins = document.querySelectorAll('.can-pin');
+    const updateCanPins = () => {
+      const show = canToggle && canToggle.checked;
+      canPins.forEach((el) => {
+        el.style.display = show ? '' : 'none';
+      });
+    };
+    if (canToggle) {
+      canToggle.addEventListener('change', updateCanPins);
+      updateCanPins();
+    }
+  </script>
+</body>
+</html>
 )rawliteral";
