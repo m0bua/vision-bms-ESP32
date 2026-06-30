@@ -80,9 +80,12 @@ struct BmsSnapshot
   int soh = 0;
   int minCellTemp = 0;
   int maxCellTemp = 0;
+  int avgCellTemp = 0;
   int tempPCB = 0;
   int tempSensors[4] = {0, 0, 0, 0};
   uint8_t tempSensorCount = 0;
+  int batteryTemps[4] = {0, 0, 0, 0};
+  uint8_t batteryTempCount = 0;
   uint16_t remainingAh = 0;
   uint16_t maxChargeCurrentLimit = 0;
   uint16_t status = 0;
@@ -258,6 +261,11 @@ String formatByteBufferDec(const uint8_t *buf, size_t len)
     out = "none";
   }
   return out;
+}
+
+String formatTempPair(uint16_t raw)
+{
+  return String((uint8_t)(raw >> 8)) + ", " + String((uint8_t)(raw & 0xFF));
 }
 
 String htmlEscape(const String &input)
@@ -548,8 +556,6 @@ const char *rawRegisterName(uint8_t index)
     return "SOH";
   case 0x18:
     return "SOC";
-  case 0x1A:
-    return "cycles";
   case 0x1B:
     return "status";
   case 0x1C:
@@ -558,6 +564,14 @@ const char *rawRegisterName(uint8_t index)
     return "protect";
   case 0x1E:
     return "cell count";
+  case 0x1F:
+    return "pack voltage limit";
+  case 0x20:
+    return "pack capacity";
+  case 0x21:
+    return "battery temp 1/2";
+  case 0x22:
+    return "battery temp 3/4";
   default:
     return "unknown";
   }
@@ -773,7 +787,14 @@ String buildDiagRawRegistersHtml()
     html += rawRegisterName(i);
     html += "</div>";
     html += "<div class='reg-line reg-dec'>";
-    html += String(bms.rawRegs[i]);
+    if (i == 0x21 || i == 0x22)
+    {
+      html += formatTempPair(bms.rawRegs[i]);
+    }
+    else
+    {
+      html += String(bms.rawRegs[i]);
+    }
     html += "</div>";
     html += "</div>";
   }
@@ -1058,17 +1079,28 @@ void decodeSnapshot()
   bms.tempSensors[bms.tempSensorCount++] = (int16_t)bms.rawRegs[0x13];
   bms.tempSensors[bms.tempSensorCount++] = (int16_t)bms.rawRegs[0x14];
 
-  int tempMin = bms.tempSensors[0];
-  int tempMax = bms.tempSensors[0];
-  for (uint8_t i = 1; i < bms.tempSensorCount; i++)
+  bms.batteryTempCount = 0;
+  for (uint8_t reg = 0x21; reg <= 0x22; reg++)
   {
-    if (bms.tempSensors[i] < tempMin)
-      tempMin = bms.tempSensors[i];
-    if (bms.tempSensors[i] > tempMax)
-      tempMax = bms.tempSensors[i];
+    uint16_t raw = bms.rawRegs[reg];
+    bms.batteryTemps[bms.batteryTempCount++] = (int16_t)((raw >> 8) & 0xFF);
+    bms.batteryTemps[bms.batteryTempCount++] = (int16_t)(raw & 0xFF);
+  }
+
+  int tempMin = bms.batteryTemps[0];
+  int tempMax = bms.batteryTemps[0];
+  int tempSum = 0;
+  for (uint8_t i = 0; i < bms.batteryTempCount; i++)
+  {
+    tempSum += bms.batteryTemps[i];
+    if (bms.batteryTemps[i] < tempMin)
+      tempMin = bms.batteryTemps[i];
+    if (bms.batteryTemps[i] > tempMax)
+      tempMax = bms.batteryTemps[i];
   }
   bms.minCellTemp = tempMin;
   bms.maxCellTemp = tempMax;
+  bms.avgCellTemp = bms.batteryTempCount > 0 ? (tempSum / bms.batteryTempCount) : 0;
   bms.remainingAh = bms.rawRegs[0x15];
   bms.maxChargeCurrentLimit = bms.rawRegs[0x16];
   bms.soh = bms.rawRegs[0x17];
@@ -1080,7 +1112,7 @@ void decodeSnapshot()
   bms.warning = bms.rawRegs[0x1C];
   bms.protect = bms.rawRegs[0x1D];
   bms.cellCount = bms.rawRegs[0x1E];
-  // 0x1F..0x23 do not map cleanly to direct voltages; keep them as auxiliary/config fields.
+  // 0x1F..0x23 are auxiliary/config fields; 0x21..0x22 appear to hold 4 battery temps packed as bytes.
 }
 
 bool requestBmsData(uint8_t slaveId)
@@ -1555,6 +1587,11 @@ void fillTelemetryJson(JsonObject root)
 
   JsonObject temperatures = root.createNestedObject("temperatures");
   temperatures["pcb_c"] = bms.tempPCB;
+  temperatures["temp_min_c"] = bms.minCellTemp;
+  temperatures["temp_max_c"] = bms.maxCellTemp;
+  temperatures["temp_avg_c"] = bms.avgCellTemp;
+  temperatures["temp_avg_1_c"] = bms.tempSensorCount > 0 ? bms.tempSensors[0] : 0;
+  temperatures["temp_avg_2_c"] = bms.tempSensorCount > 1 ? bms.tempSensors[1] : 0;
   temperatures["cell_min_c"] = bms.minCellTemp;
   temperatures["cell_max_c"] = bms.maxCellTemp;
   temperatures["sensor_count"] = bms.tempSensorCount;
@@ -1562,6 +1599,12 @@ void fillTelemetryJson(JsonObject root)
   for (uint8_t i = 0; i < bms.tempSensorCount; i++)
   {
     tempSensors.add(bms.tempSensors[i]);
+  }
+  temperatures["battery_temp_count"] = bms.batteryTempCount;
+  JsonArray batteryTemps = temperatures.createNestedArray("battery_raw_c");
+  for (uint8_t i = 0; i < bms.batteryTempCount; i++)
+  {
+    batteryTemps.add(bms.batteryTemps[i]);
   }
 
   JsonObject limits = root.createNestedObject("limits");
