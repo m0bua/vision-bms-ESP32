@@ -277,8 +277,13 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
   .cell{padding:10px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);}
   .reg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(9em,1fr));gap:12px;margin-top:12px}
+  .can-grid{grid-template-columns:repeat(auto-fill,minmax(18.5em,1fr))}
   .reg-card{padding:12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line)}
+  .can-card{padding:12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line)}
   .reg-line{line-height:1.35}
+  .can-row{display:flex;justify-content:space-between;gap:12px;align-items:baseline;line-height:1.35;margin-top:4px}
+  .can-k{color:var(--muted);font-size:12px;white-space:nowrap}
+  .can-v{font-size:12px;text-align:right;word-break:break-word}
   .reg-addr,.reg-hex,.reg-dec{word-break:break-all}
   .reg-addr,.reg-hex{font-family:monospace;color:var(--muted);font-size:12px;display:inline-block;margin-right:1em;}
   .reg-name{font-size:14px;font-weight:700;margin:4px 0;color:var(--text)}
@@ -312,14 +317,10 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
     <div>Polls: __DEBUG_POLL_COUNT__ | Success: __DEBUG_SUCCESS_COUNT__ | Fail: __DEBUG_FAIL_COUNT__</div>
     <div>Last fail: <span class='tag tag-muted'>__DEBUG_LAST_FAIL__</span></div>
     <div>Last poll: __DEBUG_LAST_POLL_MS__ ms | Last frame len: __DEBUG_LAST_FRAME_LEN__</div>
-    <div>CAN init: __DEBUG_CAN_INIT__ | CAN start: __DEBUG_CAN_START__ | CAN state: __DEBUG_CAN_STATUS__</div>
-    <div>CAN TWAI state: __DEBUG_CAN_STATE__ | TX err: __DEBUG_CAN_TX_ERR__ | RX err: __DEBUG_CAN_RX_ERR__</div>
-    <div>CAN bus err: __DEBUG_CAN_BUS_ERR__ | Arb lost: __DEBUG_CAN_ARB_LOST__ | Queue: __DEBUG_CAN_QUEUE__</div>
-    <div>CAN tx: __DEBUG_CAN_TX__ | CAN tx fail: __DEBUG_CAN_TX_FAIL__</div>
-    <div style='margin-top:6px;font-family:monospace;word-break:break-all'>Last frame: __DEBUG_LAST_FRAME__</div>
   </div>
 </div>
 __RAW_REGS__
+__LAST_BMS_FRAME__
 <script>
   const refreshSeconds = Number(document.body.dataset.refreshSeconds || 0);
   const toggleRefresh = () => {

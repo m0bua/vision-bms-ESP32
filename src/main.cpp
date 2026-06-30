@@ -144,6 +144,15 @@ struct BmsDebugState
   esp_err_t lastCanTxResult = ESP_OK;
   esp_err_t canStatusResult = ESP_FAIL;
   twai_status_info_t canStatus = {};
+  struct CanFrameSnapshot
+  {
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t data[8] = {0};
+  };
+  static constexpr uint8_t CAN_FRAME_CAPACITY = 8;
+  CanFrameSnapshot canFrames[CAN_FRAME_CAPACITY] = {};
+  uint8_t canFrameCount = 0;
 };
 
 BmsDebugState dbg;
@@ -231,6 +240,22 @@ String formatByteBuffer(const uint8_t *buf, size_t len)
     char tmp[4];
     snprintf(tmp, sizeof(tmp), "%02X", buf[i]);
     out += tmp;
+  }
+  return out;
+}
+
+String formatByteBufferDec(const uint8_t *buf, size_t len)
+{
+  String out;
+  for (size_t i = 0; i < len; i++)
+  {
+    if (i > 0)
+      out += ", ";
+    out += String(buf[i]);
+  }
+  if (out.isEmpty())
+  {
+    out = "none";
   }
   return out;
 }
@@ -756,6 +781,202 @@ String buildDiagRawRegistersHtml()
   return html;
 }
 
+String buildDiagLastBmsFrameHtml()
+{
+  String html;
+  html.reserve(160 + dbg.lastResponseLen * 4);
+  html += "<div class='card'><h2 style='margin:0'>Last BMS frame</h2>";
+  html += "<div class='soft'>Last UART/Modbus response from the BMS, not CAN.</div>";
+  html += "<div class='reg-card' style='margin-top:12px'>";
+  html += "<div class='reg-line reg-name'>Len</div>";
+  html += "<div class='reg-line reg-dec'>";
+  html += String(dbg.lastResponseLen);
+  html += "</div>";
+  html += "<div class='reg-line reg-name' style='margin-top:8px'>Hex</div>";
+  html += "<div class='reg-line reg-dec' style='word-break:break-all'>";
+  html += htmlEscape(formatByteBuffer(dbg.lastResponse, dbg.lastResponseLen));
+  html += "</div>";
+  html += "</div></div>";
+  return html;
+}
+
+static String canFrameTitle(uint32_t id)
+{
+  switch (id)
+  {
+  case 0x351:
+    return "Status";
+  case 0x355:
+    return "SOC";
+  case 0x356:
+    return "Pack voltage / current";
+  case 0x359:
+    return "Node / mode";
+  case 0x35E:
+    return "Manufacturer";
+  case 0x35F:
+    return "Capacity / config";
+  default:
+    return "Unknown frame";
+  }
+}
+
+static void appendCanField(String &html, const char *name, const String &value)
+{
+  html += "<div class='reg-line reg-name'>";
+  html += name;
+  html += "</div>";
+  html += "<div class='reg-line reg-dec'>";
+  html += value;
+  html += "</div>";
+}
+
+String buildDiagCanHtml()
+{
+  String html;
+  html.reserve(180 + dbg.canFrameCount * 220);
+  html += "<div class='card'><h2 style='margin:0'>CAN frames</h2>";
+  html += "<div class='soft'>Transmit frames captured from the latest cycle.</div>";
+  html += "<div style='margin-top:12px;padding-top:12px;border-top:1px solid var(--line)'>";
+  html += "<div class='flag-title'>CAN status</div>";
+  html += "<div>CAN init: ";
+  html += String((int)dbg.canInitResult);
+  html += " | CAN start: ";
+  html += String((int)dbg.canStartResult);
+  html += " | CAN state: ";
+  html += dbg.canStarted ? "started" : (cfg.enableDeyeCan ? "not started" : "disabled");
+  html += "</div>";
+  html += "<div>CAN TWAI state: ";
+  html += dbg.canStatusResult == ESP_OK ? canStateText(dbg.canStatus.state) : "unknown";
+  html += " | TX err: ";
+  html += String(dbg.canStatus.tx_error_counter);
+  html += " | RX err: ";
+  html += String(dbg.canStatus.rx_error_counter);
+  html += "</div>";
+  html += "<div>CAN bus err: ";
+  html += String(dbg.canStatus.bus_error_count);
+  html += " | Arb lost: ";
+  html += String(dbg.canStatus.arb_lost_count);
+  html += " | Queue: ";
+  html += String(dbg.canStatus.msgs_to_tx);
+  html += "</div>";
+  html += "<div>CAN tx: ";
+  html += String(dbg.canTxCount);
+  html += " | CAN tx fail: ";
+  html += String(dbg.canTxFail);
+  html += "</div>";
+  html += "</div>";
+  html += "<div class='reg-grid can-grid'>";
+  if (dbg.canFrameCount == 0)
+  {
+    html += "<div class='soft'>No CAN frames captured yet.</div>";
+  }
+  for (uint8_t i = 0; i < dbg.canFrameCount; i++)
+  {
+    const auto &frame = dbg.canFrames[i];
+    html += "<div class='reg-card can-card'>";
+    html += "<div class='reg-line reg-addr'>ID ";
+    html += formatHex16((uint16_t)frame.id);
+    html += "</div>";
+    html += "<div class='reg-line reg-hex'>LEN ";
+    html += String(frame.len);
+    html += "</div>";
+    html += "<div class='reg-line reg-name'>Raw</div>";
+    html += "<div class='reg-line reg-dec' style='word-break:break-all'>";
+    html += htmlEscape(formatByteBuffer(frame.data, frame.len));
+    html += "</div>";
+    html += "<div class='reg-line reg-dec' style='word-break:break-all'>";
+    html += htmlEscape(formatByteBufferDec(frame.data, frame.len));
+    html += "</div>";
+    html += "<div class='reg-line reg-name'>";
+    html += canFrameTitle(frame.id);
+    html += "</div>";
+    switch (frame.id)
+    {
+    case 0x351:
+    {
+      uint16_t w0 = (uint16_t)frame.data[0] | ((uint16_t)frame.data[1] << 8);
+      uint16_t w1 = (uint16_t)frame.data[2] | ((uint16_t)frame.data[3] << 8);
+      uint16_t w2 = (uint16_t)frame.data[4] | ((uint16_t)frame.data[5] << 8);
+      uint16_t w3 = (uint16_t)frame.data[6] | ((uint16_t)frame.data[7] << 8);
+      appendCanField(html, "Word 0", String(w0));
+      appendCanField(html, "Word 1", String(w1));
+      appendCanField(html, "Word 2", String(w2));
+      appendCanField(html, "Word 3", String(w3));
+      break;
+    }
+    case 0x355:
+      appendCanField(html, "SOC", String((uint16_t)frame.data[0] | ((uint16_t)frame.data[1] << 8)) + " %");
+      appendCanField(html, "Word 1", String((uint16_t)frame.data[2] | ((uint16_t)frame.data[3] << 8)));
+      appendCanField(html, "Word 2", String((uint16_t)frame.data[4] | ((uint16_t)frame.data[5] << 8)));
+      appendCanField(html, "Word 3", String((uint16_t)frame.data[6] | ((uint16_t)frame.data[7] << 8)));
+      break;
+    case 0x356:
+    {
+      int16_t rawCurrent = (int16_t)(((uint16_t)frame.data[2]) | ((uint16_t)frame.data[3] << 8));
+      float packV = ((uint16_t)frame.data[0] | ((uint16_t)frame.data[1] << 8)) / 100.0f;
+      float currentA = rawCurrent / 10.0f;
+      appendCanField(html, "Pack voltage", formatJsonFloat(packV, 2) + " V (" + String((uint16_t)frame.data[0] | ((uint16_t)frame.data[1] << 8)) + ")");
+      appendCanField(html, "Pack current", formatJsonFloat(currentA, 1) + " A (" + String(rawCurrent) + ")");
+      appendCanField(html, "Word 2", String((uint16_t)frame.data[4] | ((uint16_t)frame.data[5] << 8)));
+      appendCanField(html, "Word 3", String((uint16_t)frame.data[6] | ((uint16_t)frame.data[7] << 8)));
+      break;
+    }
+    case 0x359:
+      appendCanField(html, "Byte 0", String(frame.data[0]));
+      appendCanField(html, "Byte 1", String(frame.data[1]));
+      appendCanField(html, "Byte 2", String(frame.data[2]));
+      appendCanField(html, "Byte 3", String(frame.data[3]));
+      appendCanField(html, "Byte 4", String((char)frame.data[4]));
+      appendCanField(html, "Byte 5", String(frame.data[5]));
+      appendCanField(html, "Byte 6", String(frame.data[6]));
+      appendCanField(html, "Byte 7", String(frame.data[7]));
+      break;
+    case 0x35E:
+    {
+      char text[9] = {0};
+      memcpy(text, frame.data, min<uint8_t>(8, frame.len));
+      appendCanField(html, "ASCII", String(text));
+      break;
+    }
+    case 0x35F:
+      appendCanField(html, "Capacity 0", String((uint16_t)frame.data[0] | ((uint16_t)frame.data[1] << 8)) + " Ah");
+      appendCanField(html, "Word 1", String((uint16_t)frame.data[2] | ((uint16_t)frame.data[3] << 8)));
+      appendCanField(html, "Capacity 2", String((uint16_t)frame.data[4] | ((uint16_t)frame.data[5] << 8)) + " Ah");
+      appendCanField(html, "Word 3", String((uint16_t)frame.data[6] | ((uint16_t)frame.data[7] << 8)));
+      break;
+    default:
+      appendCanField(html, "Hex", htmlEscape(formatByteBuffer(frame.data, frame.len)));
+      appendCanField(html, "Dec", htmlEscape(formatByteBufferDec(frame.data, frame.len)));
+      break;
+    }
+    html += "</div>";
+  }
+  html += "</div></div>";
+  return html;
+}
+
+void captureCanFrame(uint32_t id, uint8_t len, const uint8_t *data)
+{
+  for (uint8_t i = 0; i < dbg.canFrameCount; i++)
+  {
+    if (dbg.canFrames[i].id == id)
+    {
+      dbg.canFrames[i].len = len;
+      memcpy(dbg.canFrames[i].data, data, len);
+      return;
+    }
+  }
+
+  if (dbg.canFrameCount >= BmsDebugState::CAN_FRAME_CAPACITY)
+    return;
+
+  auto &frame = dbg.canFrames[dbg.canFrameCount++];
+  frame.id = id;
+  frame.len = len;
+  memcpy(frame.data, data, len);
+}
+
 void clearSnapshotData()
 {
   bms.online = false;
@@ -766,6 +987,8 @@ void clearSnapshotData()
   bms.rawByteCount = 0;
   bms.crcReceived = 0;
   bms.crcCalculated = 0;
+  dbg.canFrameCount = 0;
+  memset(dbg.canFrames, 0, sizeof(dbg.canFrames));
 }
 
 void recordBmsFailure(BmsFailReason reason, const uint8_t *frame = nullptr, uint8_t frameLen = 0)
@@ -995,6 +1218,7 @@ void sendCanFrame(uint32_t id, uint8_t len, uint8_t *data)
   {
     return;
   }
+  captureCanFrame(id, len, data);
   dbg.canTxCount++;
   twai_message_t message = {};
   message.identifier = id;
@@ -1085,21 +1309,13 @@ String buildDiagHtml(uint16_t refreshSeconds)
   html.replace("__DEBUG_LAST_FAIL__", failReasonText(dbg.lastFailReason));
   html.replace("__DEBUG_LAST_POLL_MS__", String(dbg.lastPollDurationMs));
   html.replace("__DEBUG_LAST_FRAME_LEN__", String(dbg.lastFrameLen));
-  html.replace("__DEBUG_LAST_FRAME__", ENABLE_DEBUG_RAW_FRAMES ? formatByteBuffer(dbg.lastResponse, dbg.lastResponseLen) : String("disabled"));
   html.replace("__DEBUG_TEMP_SENSORS__", formatIntArray(bms.tempSensors, bms.tempSensorCount));
   html.replace("__DEBUG_TEMP_SENSOR_COUNT__", String(bms.tempSensorCount));
-  html.replace("__DEBUG_CAN_INIT__", String((int)dbg.canInitResult));
-  html.replace("__DEBUG_CAN_START__", String((int)dbg.canStartResult));
-  html.replace("__DEBUG_CAN_STATUS__", dbg.canStarted ? "started" : (cfg.enableDeyeCan ? "not started" : "disabled"));
-  html.replace("__DEBUG_CAN_STATE__", dbg.canStatusResult == ESP_OK ? canStateText(dbg.canStatus.state) : "unknown");
-  html.replace("__DEBUG_CAN_TX_ERR__", String(dbg.canStatus.tx_error_counter));
-  html.replace("__DEBUG_CAN_RX_ERR__", String(dbg.canStatus.rx_error_counter));
-  html.replace("__DEBUG_CAN_BUS_ERR__", String(dbg.canStatus.bus_error_count));
-  html.replace("__DEBUG_CAN_ARB_LOST__", String(dbg.canStatus.arb_lost_count));
-  html.replace("__DEBUG_CAN_QUEUE__", String(dbg.canStatus.msgs_to_tx));
-  html.replace("__DEBUG_CAN_TX__", String(dbg.canTxCount));
-  html.replace("__DEBUG_CAN_TX_FAIL__", String(dbg.canTxFail));
-  html.replace("__RAW_REGS__", buildDiagRawRegistersHtml());
+  String diagBlocks = buildDiagRawRegistersHtml();
+  diagBlocks += buildDiagLastBmsFrameHtml();
+  diagBlocks += buildDiagCanHtml();
+  html.replace("__RAW_REGS__", diagBlocks);
+  html.replace("__LAST_BMS_FRAME__", "");
   return html;
 }
 
