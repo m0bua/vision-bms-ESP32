@@ -162,21 +162,25 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
           <div><span class="muted">Cell count:</span> <strong id="cellCount">-</strong></div>
         </div>
         <div class="row" style="margin-top:12px">
+          Temp:
           <div><span class="muted">PCB:</span> <strong id="pcbTemp">-</strong></div>
-          <div><span class="muted">Min:</span> <strong id="tempMin">-</strong></div>
-          <div><span class="muted">Max:</span> <strong id="tempMax">-</strong></div>
-          <div><span class="muted">Avg:</span> <strong id="tempAvg">-</strong></div>
+          <div><span class="muted">min:</span> <strong id="tempMin">-</strong></div>
+          <div><span class="muted">max:</span> <strong id="tempMax">-</strong></div>
+          <div><span class="muted">avg:</span> <strong id="tempAvg">-</strong></div>
         </div>
         <div class="row" style="margin-top:8px">
+          Temp:
           <div><span class="muted">1:</span> <strong id="temp1">-</strong></div>
           <div><span class="muted">2:</span> <strong id="temp2">-</strong></div>
           <div><span class="muted">3:</span> <strong id="temp3">-</strong></div>
           <div><span class="muted">4:</span> <strong id="temp4">-</strong></div>
+          <div><span class="muted">Raw:</span> <strong id="tempRaw">-</strong></div>
         </div>
         <div class="row" style="margin-top:8px">
-          <div><span class="muted">Cell min:</span> <strong id="cellMin">-</strong></div>
-          <div><span class="muted">Cell avg:</span> <strong id="cellAvg">-</strong></div>
-          <div><span class="muted">Cell max:</span> <strong id="cellMax">-</strong></div>
+          Cell:
+          <div><span class="muted">min:</span> <strong id="cellMin">-</strong></div>
+          <div><span class="muted">avg:</span> <strong id="cellAvg">-</strong></div>
+          <div><span class="muted">max:</span> <strong id="cellMax">-</strong></div>
           <div><span class="muted">Delta:</span> <strong id="cellDelta">-</strong></div>
         </div>
       </div>
@@ -250,15 +254,16 @@ __UI_SHARED_JS__
         setText('packV', fmt(pack.voltage_v || 0, 2) + ' V');
         setText('currentA', fmt(pack.current_a || 0, 2) + ' A');
         setText('soh', (pack.soh_pct ?? '-') + '%');
-        setText('pcbTemp', (temperatures.pcb_c ?? '-') + ' C');
-        setText('tempMin', (temperatures.temp_min_c ?? '-') + ' C');
-        setText('tempMax', (temperatures.temp_max_c ?? '-') + ' C');
-        setText('tempAvg', (temperatures.temp_avg_c ?? '-') + ' C');
+        setText('pcbTemp', (temperatures.pcb_c ?? '-') + ' °C');
+        setText('tempMin', (temperatures.cell_min_c ?? '-') + ' °C');
+        setText('tempMax', (temperatures.cell_max_c ?? '-') + ' °C');
+        setText('tempAvg', (temperatures.temp_avg_c ?? '-') + ' °C');
         const tempRaw = temperatures.battery_raw_c || temperatures.raw_c || [];
-        setText('temp1', (tempRaw[0] ?? '-') + ' C');
-        setText('temp2', (tempRaw[1] ?? '-') + ' C');
-        setText('temp3', (tempRaw[2] ?? '-') + ' C');
-        setText('temp4', (tempRaw[3] ?? '-') + ' C');
+        setText('temp1', (tempRaw[0] ?? '-') + ' °C');
+        setText('temp2', (tempRaw[1] ?? '-') + ' °C');
+        setText('temp3', (tempRaw[2] ?? '-') + ' °C');
+        setText('temp4', (tempRaw[3] ?? '-') + ' °C');
+        setText('tempRaw', [tempRaw[0], tempRaw[1]].filter((v) => v != null).map((v) => v + ' °C').join(', '));
         setText('remainingAh', limits.remaining_ah ?? '-');
         setText('cellMin', fmt(cells.min_v || 0, 3) + ' V');
         setText('cellAvg', fmt(cells.avg_v || 0, 3) + ' V');

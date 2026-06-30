@@ -809,10 +809,9 @@ String buildDiagLastBmsFrameHtml()
   html += "<div class='card'><h2 style='margin:0'>Last BMS frame</h2>";
   html += "<div class='soft'>Last UART/Modbus response from the BMS, not CAN.</div>";
   html += "<div class='reg-card' style='margin-top:12px'>";
-  html += "<div class='reg-line reg-name'>Len</div>";
-  html += "<div class='reg-line reg-dec'>";
+  html += "<div class='can-row' style='margin-top:0'><span class='can-k'>Len</span><span class='can-v'>";
   html += String(dbg.lastResponseLen);
-  html += "</div>";
+  html += "</span></div>";
   html += "<div class='reg-line reg-name' style='margin-top:8px'>Hex</div>";
   html += "<div class='reg-line reg-dec' style='word-break:break-all'>";
   html += htmlEscape(formatByteBuffer(dbg.lastResponse, dbg.lastResponseLen));
@@ -844,12 +843,11 @@ static String canFrameTitle(uint32_t id)
 
 static void appendCanField(String &html, const char *name, const String &value)
 {
-  html += "<div class='reg-line reg-name'>";
+  html += "<div class='can-row'><span class='can-k'>";
   html += name;
-  html += "</div>";
-  html += "<div class='reg-line reg-dec'>";
+  html += "</span><span class='can-v'>";
   html += value;
-  html += "</div>";
+  html += "</span></div>";
 }
 
 String buildDiagCanHtml()
@@ -1598,11 +1596,9 @@ void fillTelemetryJson(JsonObject root)
 
   JsonObject temperatures = root.createNestedObject("temperatures");
   temperatures["pcb_c"] = bms.tempPCB;
-  temperatures["temp_min_c"] = bms.minCellTemp;
-  temperatures["temp_max_c"] = bms.maxCellTemp;
   temperatures["temp_avg_c"] = bms.avgCellTemp;
-  temperatures["temp_avg_1_c"] = bms.tempSensorCount > 0 ? bms.tempSensors[0] : 0;
-  temperatures["temp_avg_2_c"] = bms.tempSensorCount > 1 ? bms.tempSensors[1] : 0;
+  temperatures["temp_raw_1_c"] = bms.tempSensorCount > 0 ? bms.tempSensors[0] : 0;
+  temperatures["temp_raw_2_c"] = bms.tempSensorCount > 1 ? bms.tempSensors[1] : 0;
   temperatures["cell_min_c"] = bms.minCellTemp;
   temperatures["cell_max_c"] = bms.maxCellTemp;
   temperatures["sensor_count"] = bms.tempSensorCount;
