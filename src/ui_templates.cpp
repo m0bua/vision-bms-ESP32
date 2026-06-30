@@ -133,7 +133,7 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
         <div class="stats">
           <div class="stat"><div class="label">Wi-Fi</div><div class="value" id="wifiState">-</div><div class="muted" id="wifiIp">-</div></div>
           <div class="stat"><div class="label">Uptime</div><div class="value" id="uptime">-</div><div class="muted" id="lastUpdate">-</div></div>
-          <div class="stat"><div class="label">Errors</div><div class="value" id="errors">-</div><div class="muted" id="crc">-</div></div>
+          <div class="stat"><div class="label">Errors</div><div class="value" id="errors">-</div><div class="muted" id="canErrors">-</div><div class="muted" id="crc">-</div></div>
         </div>
       </div>
 
@@ -227,6 +227,7 @@ __UI_SHARED_JS__
         const limits = data.limits || {};
         const cells = data.cells || {};
         const diagnostics = data.diagnostics || {};
+        const debug = diagnostics.debug || {};
         const crc = diagnostics.crc || {};
         setText('pollState', 'live');
         byId('pollState').className = 'pill live';
@@ -235,7 +236,12 @@ __UI_SHARED_JS__
         setText('wifiIp', 'IP: ' + system.wifi.ip);
         setText('uptime', formatUptime(system.uptime_ms / 1000));
         setText('lastUpdate', system.last_update_ms ? ('last update: ' + Math.floor((system.uptime_ms - system.last_update_ms) / 1000) + ' s ago') : 'no data yet');
-        setText('errors', system.errors);
+        setText('errors', 'BMS ' + system.errors);
+        if (debug.can_started) {
+          setText('canErrors', 'CAN ' + (debug.can_tx_fail ?? 0) + '/' + (debug.can_tx_error_counter ?? 0));
+        } else {
+          setText('canErrors', '');
+        }
         setText('crc', 'CRC rx ' + hex16(crc.received || 0) + ' / calc ' + hex16(crc.calculated || 0));
         const s = badgeForOnline(status.online);
         setText('statusText', s.text);
@@ -499,6 +505,7 @@ extern const char SETUP_HTML[] PROGMEM = R"rawliteral(
         </div>
         <div class='footer-actions'>
           <button class='btn' type='submit'>Save & reboot</button>
+          <button class='btn secondary' type='submit' formaction='/reboot' formmethod='post'>Reset</button>
           <button class='btn secondary' type='submit' formaction='/reset' formmethod='post'>Reset saved config</button>
         </div>
       </div>

@@ -1470,6 +1470,17 @@ void handleReset()
   scheduleReboot();
 }
 
+void handleReboot()
+{
+  if (server.method() != HTTP_POST)
+  {
+    server.send(405, "text/plain", "POST only");
+    return;
+  }
+  server.send(200, "text/plain", "Rebooting...");
+  scheduleReboot();
+}
+
 void handleNotFound()
 {
   if (WiFi.status() != WL_CONNECTED || cfg.wifiSsid[0] == '\0')
@@ -1721,6 +1732,7 @@ void setup()
   server.on("/", handleRoot);
   server.on("/setup", handleSetup);
   server.on("/save", HTTP_POST, handleSave);
+  server.on("/reboot", HTTP_POST, handleReboot);
   server.on("/reset", HTTP_POST, handleReset);
   server.on("/diag", handleDiag);
   server.on("/json", handleJson);
