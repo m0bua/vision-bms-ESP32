@@ -567,7 +567,7 @@ const char *rawRegisterName(uint8_t index)
   case 0x1F:
     return "pack voltage limit";
   case 0x20:
-    return "pack capacity";
+    return "pack max capacity";
   case 0x21:
     return "battery temp 1/2";
   case 0x22:
@@ -1597,8 +1597,6 @@ void fillTelemetryJson(JsonObject root)
   JsonObject temperatures = root.createNestedObject("temperatures");
   temperatures["pcb_c"] = bms.tempPCB;
   temperatures["temp_avg_c"] = bms.avgCellTemp;
-  temperatures["temp_raw_1_c"] = bms.tempSensorCount > 0 ? bms.tempSensors[0] : 0;
-  temperatures["temp_raw_2_c"] = bms.tempSensorCount > 1 ? bms.tempSensors[1] : 0;
   temperatures["cell_min_c"] = bms.minCellTemp;
   temperatures["cell_max_c"] = bms.maxCellTemp;
   temperatures["sensor_count"] = bms.tempSensorCount;
@@ -1617,6 +1615,7 @@ void fillTelemetryJson(JsonObject root)
   JsonObject limits = root.createNestedObject("limits");
   limits["remaining_ah"] = bms.remainingAh;
   limits["max_charge_current_limit"] = bms.maxChargeCurrentLimit;
+  limits["pack_voltage_limit"] = bms.rawRegs[0x1F];
 
   JsonObject cells = root.createNestedObject("cells");
   cells["count"] = bms.cellCount ? bms.cellCount : 15;
