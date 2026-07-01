@@ -1,0 +1,45 @@
+name: Build and Release Firmware
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set release version
+        id: version
+        shell: bash
+        run: echo "tag=v$(date -u +%Y.%m.%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build firmware
+        run: pio run -e esp32doit-devkit-v1
+
+      - name: Create or update release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          make_latest: true
+          files: |
+            .pio/build/esp32doit-devkit-v1/firmware.bin
