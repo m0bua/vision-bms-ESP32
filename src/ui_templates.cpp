@@ -391,7 +391,7 @@ extern const char SETUP_HTML[] PROGMEM = R"rawliteral(
     .field.full{grid-column:span 12}
     .field.toggle{justify-content:flex-start}
     label{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-    input[type=text],input[type=password],input[type=number],textarea{
+    input[type=text],input[type=password],input[type=number],input[type=file],textarea{
       width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);
       background:var(--panel2);color:var(--text);font:inherit;outline:none;
     }
@@ -512,6 +512,29 @@ extern const char SETUP_HTML[] PROGMEM = R"rawliteral(
           <button class='btn' type='submit'>Save & reboot</button>
           <button class='btn secondary' type='submit' formaction='/reboot' formmethod='post'>Reset</button>
           <button class='btn secondary' type='submit' formaction='/reset' formmethod='post'>Reset saved config</button>
+        </div>
+      </div>
+    </form>
+
+    <form method='post' action='/update' enctype='multipart/form-data' style='margin-top:16px'>
+      <div class='card'>
+        <div class='grid'>
+          <section class='section'>
+            <h2 class='section-title'>Firmware update</h2>
+            <div class='section-grid'>
+              <div class='field full'>
+                <label for='firmware_file'>Firmware binary</label>
+                <input id='firmware_file' name='firmware_file' type='file' accept='.bin,application/octet-stream'>
+                <div class='note'>Upload the `firmware.bin` from `.pio/build/esp32doit-devkit-v1/firmware.bin`.</div>
+              </div>
+              <div class='field full'>
+                <div class='note'>Device will reboot automatically after a successful upload.</div>
+              </div>
+            </div>
+          </section>
+        </div>
+        <div class='footer-actions'>
+          <button class='btn' type='submit'>Upload firmware</button>
         </div>
       </div>
     </form>

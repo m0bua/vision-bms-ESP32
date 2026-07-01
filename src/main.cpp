@@ -4,6 +4,7 @@
 #include <Preferences.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include <Update.h>
 #include <driver/twai.h>
 #include <stdarg.h>
 #include <cstring>
@@ -120,6 +121,8 @@ extern const char SETUP_HTML[] PROGMEM;
 
 void handleSetup();
 void handleDashboard();
+void handleFirmwareUpdate();
+void handleFirmwareUpdateUpload();
 
 struct BmsDebugState
 {
@@ -1479,6 +1482,68 @@ void handleReboot()
   scheduleReboot();
 }
 
+void handleFirmwareUpdate()
+{
+  const bool updateFailed = Update.hasError();
+  String html;
+  html.reserve(768);
+  html += "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
+  html += "<meta http-equiv='refresh' content='4;url=/setup'>";
+  html += "<title>Firmware update</title><style>body{font-family:Arial,Helvetica,sans-serif;background:#121212;color:#f2f2f2;padding:24px;line-height:1.5}a{color:#80cbc4}</style></head><body>";
+  if (updateFailed)
+  {
+    html += "<h1>Update failed</h1><p>The firmware image was not accepted. Please try again with a valid `firmware.bin`.</p>";
+  }
+  else
+  {
+    html += "<h1>Update complete</h1><p>Firmware uploaded successfully. Rebooting now...</p>";
+    scheduleReboot(2000UL);
+  }
+  html += "<p><a href='/setup'>Back to setup</a></p></body></html>";
+  server.send(updateFailed ? 500 : 200, "text/html", html);
+}
+
+void handleFirmwareUpdateUpload()
+{
+  HTTPUpload &upload = server.upload();
+
+  switch (upload.status)
+  {
+  case UPLOAD_FILE_START:
+    debugPrintf("[OTA] start filename='%s' size=%u", upload.filename.c_str(), (unsigned)upload.totalSize);
+    if (!Update.begin(UPDATE_SIZE_UNKNOWN))
+    {
+      debugPrintf("[OTA] begin failed");
+      Update.printError(Serial);
+    }
+    break;
+  case UPLOAD_FILE_WRITE:
+    if (Update.write(upload.buf, upload.currentSize) != upload.currentSize)
+    {
+      debugPrintf("[OTA] write failed at %u bytes", (unsigned)upload.currentSize);
+      Update.printError(Serial);
+    }
+    break;
+  case UPLOAD_FILE_END:
+    if (Update.end(true))
+    {
+      debugPrintf("[OTA] success size=%u", (unsigned)upload.totalSize);
+    }
+    else
+    {
+      debugPrintf("[OTA] end failed");
+      Update.printError(Serial);
+    }
+    break;
+  case UPLOAD_FILE_ABORTED:
+    debugPrintf("[OTA] aborted");
+    Update.abort();
+    break;
+  default:
+    break;
+  }
+}
+
 void handleNotFound()
 {
   if (WiFi.status() != WL_CONNECTED || cfg.wifiSsid[0] == '\0')
@@ -1729,6 +1794,7 @@ void setup()
   server.on("/save", HTTP_POST, handleSave);
   server.on("/reboot", HTTP_POST, handleReboot);
   server.on("/reset", HTTP_POST, handleReset);
+  server.on("/update", HTTP_POST, handleFirmwareUpdate, handleFirmwareUpdateUpload);
   server.on("/diag", handleDiag);
   server.on("/json", handleJson);
   server.onNotFound(handleNotFound);
