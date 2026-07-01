@@ -20,7 +20,7 @@ jobs:
       - name: Set release version
         id: version
         shell: bash
-        run: echo "tag=v$(date -u +%Y.%m.%d)" >> "$GITHUB_OUTPUT"
+        run: echo "tag=v$(date -u +%Y.%m.%d-%H.%M)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Python
         uses: actions/setup-python@v5
