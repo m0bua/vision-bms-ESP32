@@ -5,6 +5,11 @@ on:
     branches:
       - main
       - master
+    paths:
+      - 'platformio.ini'
+      - 'src/**'
+      - 'lib/**'
+      - 'include/**'
 
 permissions:
   contents: write
