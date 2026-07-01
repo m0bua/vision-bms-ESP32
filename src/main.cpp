@@ -1664,14 +1664,14 @@ void fillTelemetryJson(JsonObject root)
   temperatures["temp_avg_c"] = bms.avgCellTemp;
   temperatures["cell_min_c"] = bms.minCellTemp;
   temperatures["cell_max_c"] = bms.maxCellTemp;
-  temperatures["sensor_count"] = bms.tempSensorCount;
+  temperatures["raw_count"] = bms.tempSensorCount;
   JsonArray tempSensors = temperatures.createNestedArray("raw_c");
   for (uint8_t i = 0; i < bms.tempSensorCount; i++)
   {
     tempSensors.add(bms.tempSensors[i]);
   }
-  temperatures["battery_temp_count"] = bms.batteryTempCount;
-  JsonArray batteryTemps = temperatures.createNestedArray("battery_raw_c");
+  temperatures["sensor_count"] = bms.batteryTempCount;
+  JsonArray batteryTemps = temperatures.createNestedArray("cell_sensors_c");
   for (uint8_t i = 0; i < bms.batteryTempCount; i++)
   {
     batteryTemps.add(bms.batteryTemps[i]);

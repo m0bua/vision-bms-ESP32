@@ -195,8 +195,8 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
           <div class="label">Links</div>
           <div class="row">
             <a href="/setup">Settings</a>
-            <a href="/json">JSON</a>
             <a href="/diag">Diagnostic</a>
+            <a href="/json">JSON</a>
           </div>
         </div>
       </div>
@@ -397,6 +397,9 @@ extern const char SETUP_HTML[] PROGMEM = R"rawliteral(
     }
     textarea{min-height:160px;resize:vertical;font-family:monospace}
     .check{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel2);min-height:48px}
+    .firmware-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+    .firmware-row .file-input{flex:1 1 320px}
+    .firmware-row .upload-btn{white-space:nowrap}
     .actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}
     .footer-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-start;margin-top:18px}
     .btn{appearance:none;border:1px solid var(--line);background:var(--accent);color:#0f1112;padding:12px 18px;border-radius:12px;font:inherit;font-weight:700;cursor:pointer}
@@ -510,8 +513,8 @@ extern const char SETUP_HTML[] PROGMEM = R"rawliteral(
         </div>
         <div class='footer-actions'>
           <button class='btn' type='submit'>Save & reboot</button>
-          <button class='btn secondary' type='submit' formaction='/reboot' formmethod='post'>Reset</button>
-          <button class='btn secondary' type='submit' formaction='/reset' formmethod='post'>Reset saved config</button>
+          <button class='btn secondary' type='submit' formaction='/reboot' formmethod='post'>Reboot</button>
+          <button class='btn secondary' type='submit' formaction='/reset' formmethod='post'>Reset config</button>
         </div>
       </div>
     </form>
@@ -523,18 +526,15 @@ extern const char SETUP_HTML[] PROGMEM = R"rawliteral(
             <h2 class='section-title'>Firmware update</h2>
             <div class='section-grid'>
               <div class='field full'>
-                <label for='firmware_file'>Firmware binary</label>
-                <input id='firmware_file' name='firmware_file' type='file' accept='.bin,application/octet-stream'>
-                <div class='note'>Upload the `firmware.bin` from `.pio/build/esp32doit-devkit-v1/firmware.bin`.</div>
-              </div>
-              <div class='field full'>
+                <label for='firmware_file'>Binary file</label>
+                <div class='firmware-row'>
+                  <input class='file-input' id='firmware_file' name='firmware_file' type='file' accept='.bin,application/octet-stream'>
+                  <button class='btn upload-btn' type='submit'>Upload firmware</button>
+                </div>
                 <div class='note'>Device will reboot automatically after a successful upload.</div>
               </div>
             </div>
           </section>
-        </div>
-        <div class='footer-actions'>
-          <button class='btn' type='submit'>Upload firmware</button>
         </div>
       </div>
     </form>
