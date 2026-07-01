@@ -143,14 +143,14 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
             <div class="value" id="statusText" style="margin-right:30px">-</div>
           </div>
           <div style="min-width:220px;flex:1">
-            <div class="label" style="text-align:right">SOC: <strong id="socText">-</strong></div>
+            <div class="label" style="text-align:right">SOC: <strong id="socText" style="color:var(--text)">-</strong></div>
             <div class="bar"><div class="fill" id="socBar" style="width:0%"></div></div>
-            <div class="label" style="text-align:right"><strong id="remainingAh">-</strong>Ah</div>
+            <div class="label" style="text-align:right"><strong id="remainingAh" style="color:var(--text)">-</strong>Ah</div>
           </div>
         </div>
         <div class="row" style="margin-top:12px;font-size:1.5em;">
           <div>
-            <div class="muted">Status: <strong id="healthText">-</strong></div>
+            <span class="muted">Status:</span> <strong id="statusSummary">-</strong>
           </div>
         </div>
         <div class="row" style="margin-top:12px;font-size:1.3em;">
@@ -158,6 +158,7 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
           <div><span class="muted">Current:</span> <strong id="currentA">-</strong></div>
         </div>
         <div class="row" style="margin-top:12px">
+          <div><span class="muted">Health:</span> <strong id="healthText">-</strong></div>
           <div><span class="muted">SOH:</span> <strong id="soh">-</strong></div>
           <div><span class="muted">Cell count:</span> <strong id="cellCount">-</strong></div>
         </div>
@@ -169,7 +170,6 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
           <div><span class="muted">avg:</span> <strong id="tempAvg">-</strong></div>
         </div>
         <div class="row" style="margin-top:8px">
-          Temp:
           <div><span class="muted">1:</span> <strong id="temp1">-</strong></div>
           <div><span class="muted">2:</span> <strong id="temp2">-</strong></div>
           <div><span class="muted">3:</span> <strong id="temp3">-</strong></div>
@@ -250,20 +250,23 @@ __UI_SHARED_JS__
         const s = badgeForOnline(status.online);
         setText('statusText', s.text);
         byId('statusText').className = 'value ' + s.cls;
-        setText('healthText', status.text || '-');
+        setText('statusSummary', status.text || '-');
+        setText('healthText', status.health_text || '-');
         setText('packV', fmt(pack.voltage_v || 0, 2) + ' V');
         setText('currentA', fmt(pack.current_a || 0, 2) + ' A');
         setText('soh', (pack.soh_pct ?? '-') + '%');
-        setText('pcbTemp', (temperatures.pcb_c ?? '-') + ' °C');
-        setText('tempMin', (temperatures.cell_min_c ?? '-') + ' °C');
-        setText('tempMax', (temperatures.cell_max_c ?? '-') + ' °C');
-        setText('tempAvg', (temperatures.temp_avg_c ?? '-') + ' °C');
-        const tempRaw = temperatures.battery_raw_c || temperatures.raw_c || [];
-        setText('temp1', (tempRaw[0] ?? '-') + ' °C');
-        setText('temp2', (tempRaw[1] ?? '-') + ' °C');
-        setText('temp3', (tempRaw[2] ?? '-') + ' °C');
-        setText('temp4', (tempRaw[3] ?? '-') + ' °C');
-        setText('tempRaw', [tempRaw[0], tempRaw[1]].filter((v) => v != null).map((v) => v + ' °C').join(', '));
+        const tempUnit = '\u00B0C';
+        setText('pcbTemp', (temperatures.pcb_c ?? '-') + ' ' + tempUnit);
+        setText('tempMin', (temperatures.cell_min_c ?? '-') + ' ' + tempUnit);
+        setText('tempMax', (temperatures.cell_max_c ?? '-') + ' ' + tempUnit);
+        setText('tempAvg', (temperatures.temp_avg_c ?? '-') + ' ' + tempUnit);
+        const cellTemps = temperatures.cell_sensors_c || [];
+        const rawTemps = temperatures.raw_c || [];
+        setText('temp1', (cellTemps[0] ?? '-') + ' ' + tempUnit);
+        setText('temp2', (cellTemps[1] ?? '-') + ' ' + tempUnit);
+        setText('temp3', (cellTemps[2] ?? '-') + ' ' + tempUnit);
+        setText('temp4', (cellTemps[3] ?? '-') + ' ' + tempUnit);
+        setText('tempRaw', rawTemps.filter((v) => v != null).map((v) => v + ' ' + tempUnit).join(', '));
         setText('remainingAh', limits.remaining_ah ?? '-');
         setText('cellMin', fmt(cells.min_v || 0, 3) + ' V');
         setText('cellAvg', fmt(cells.avg_v || 0, 3) + ' V');
