@@ -335,7 +335,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   #logLiveState{min-width:11ch;text-align:center;justify-content:center;display:inline-flex}
   .log-line{display:flex;gap:10px;align-items:flex-start;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05);word-break:break-word}
   .log-line:last-child{border-bottom:0}
-  .log-time{flex:0 0 auto;min-width:9ch;color:var(--muted);font-size:11px;letter-spacing:.02em}
+  .log-time{flex:0 0 auto;min-width:18ch;color:var(--muted);font-size:11px;letter-spacing:.02em}
   .log-tag{flex:0 0 auto;min-width:58px;text-align:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.04em;border:1px solid transparent}
   .log-msg{flex:1 1 auto;white-space:pre-wrap}
   .log-tag-bms{background:#183047;color:#cfe7ff;border-color:#316590}
@@ -398,7 +398,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   </div>
   <div id='liveLogHost'><div class='card'><div class='soft'>Loading live log...</div></div></div>
   <div class='card' style='margin-top:16px'>
-    <div class='flag-title'>Debug</div>
+    <h2 style="margin:0">Debug</h2>
     <div>Polls: __DEBUG_POLL_COUNT__ | Success: __DEBUG_SUCCESS_COUNT__ | Fail: __DEBUG_FAIL_COUNT__</div>
     <div>Last fail: <span class='tag tag-muted'>__DEBUG_LAST_FAIL__</span></div>
     <div>Last poll: __DEBUG_LAST_POLL_MS__ ms | Last frame len: __DEBUG_LAST_FRAME_LEN__</div>
@@ -529,20 +529,14 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   };
 
   const formatElapsed = (value) => {
-    const totalSeconds = Math.max(0, Math.floor(Number(value || 0) / 1000));
-    const days = Math.floor(totalSeconds / 86400);
-    let rem = totalSeconds % 86400;
-    const hours = Math.floor(rem / 3600);
-    rem %= 3600;
+    const totalMs = Math.max(0, Math.floor(Number(value || 0)));
+    const totalSeconds = Math.floor(totalMs / 1000);
+    const millis = totalMs % 1000;
+    const hours = Math.floor(totalSeconds / 3600);
+    const rem = totalSeconds % 3600;
     const minutes = Math.floor(rem / 60);
     const seconds = rem % 60;
-    if (days > 0) {
-      return `+${days}d ${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
-    }
-    if (hours > 0) {
-      return `+${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
-    }
-    return `+${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+    return `+${String(hours).padStart(5, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}s`;
   };
 
   const isAnyFilterEnabled = () => allLogTags.some((tag) => logFilters[tag] !== false);

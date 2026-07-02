@@ -534,26 +534,14 @@ static String renderDebugLogLine(const char *line, uint32_t tsMs);
 static String formatRelativeUptime(uint32_t elapsedMs)
 {
   uint32_t totalSeconds = elapsedMs / 1000UL;
-  uint32_t days = totalSeconds / 86400UL;
-  totalSeconds %= 86400UL;
-  uint32_t hours = totalSeconds / 3600UL;
+  uint32_t millisPart = elapsedMs % 1000UL;
+  uint32_t totalHours = totalSeconds / 3600UL;
   totalSeconds %= 3600UL;
   uint32_t minutes = totalSeconds / 60UL;
   uint32_t seconds = totalSeconds % 60UL;
 
   char buf[32];
-  if (days > 0)
-  {
-    snprintf(buf, sizeof(buf), "+%ud %02uh %02um %02us", days, hours, minutes, seconds);
-  }
-  else if (hours > 0)
-  {
-    snprintf(buf, sizeof(buf), "+%02uh %02um %02us", hours, minutes, seconds);
-  }
-  else
-  {
-    snprintf(buf, sizeof(buf), "+%02um %02us", minutes, seconds);
-  }
+  snprintf(buf, sizeof(buf), "+%05uh %02um %02u.%03us", totalHours, minutes, seconds, millisPart);
   return String(buf);
 }
 
@@ -562,7 +550,7 @@ String buildDebugLogHtml()
   String html;
   html.reserve(320 + (size_t)logState.count * 240);
   html += "<div class='card' id='liveLogCard'><div class='log-head'>";
-  html += "<div><h2 style='margin:0'>Live log</h2><div class='soft'>Recent BMS/CAN events shown newest first.</div></div>";
+  html += "<div><h2 style='margin:0'>Live log</h2></div>";
   html += "<div class='log-controls'>";
   html += "<span class='tag tag-muted' id='logLiveState'>live</span>";
   html += "<button type='button' class='log-btn' id='logToggle'>Pause</button>";
@@ -1110,9 +1098,6 @@ String buildDiagCanHtml()
   String html;
   html.reserve(180 + dbg.canFrameCount * 220);
   html += "<div class='card'><h2 style='margin:0'>CAN frames</h2>";
-  html += "<div class='soft'>Transmit frames captured from the latest cycle.</div>";
-  html += "<div style='margin-top:12px;padding-top:12px;border-top:1px solid var(--line)'>";
-  html += "<div class='flag-title'>CAN status</div>";
   html += "<div>CAN init: ";
   html += String((int)dbg.canInitResult);
   html += " | CAN start: ";
