@@ -20,6 +20,8 @@ const IPAddress AP_IP(192, 168, 0, 1);
 const IPAddress AP_MASK(255, 255, 255, 0);
 constexpr unsigned long WIFI_CONNECT_TIMEOUT_MS = 15000UL;
 constexpr size_t CUSTOM_CSS_MAX_LEN = 1536;
+constexpr uint16_t DEBUG_LOG_CAPACITY = 300;
+constexpr size_t DEBUG_LOG_LINE_MAX = 192;
 
 #ifndef ENABLE_DEBUG_SERIAL
 constexpr bool ENABLE_DEBUG_SERIAL = true;
@@ -162,6 +164,26 @@ struct BmsDebugState
 };
 
 BmsDebugState dbg;
+
+struct DebugLogState
+{
+  char lines[DEBUG_LOG_CAPACITY][DEBUG_LOG_LINE_MAX] = {};
+  uint32_t times[DEBUG_LOG_CAPACITY] = {};
+  uint16_t count = 0;
+  uint16_t head = 0;
+};
+
+DebugLogState logState;
+
+struct LogStreamClient
+{
+  WiFiClient client;
+  bool active = false;
+};
+
+constexpr uint8_t LOG_STREAM_CLIENT_CAPACITY = 2;
+LogStreamClient logStreamClients[LOG_STREAM_CLIENT_CAPACITY];
+unsigned long logStreamHeartbeatAtMs = 0;
 
 bool wifiConnected()
 {
@@ -451,19 +473,219 @@ String failReasonText(BmsFailReason reason)
   }
 }
 
-void debugPrintf(const char *fmt, ...)
+void appendDebugLog(const char *line)
 {
-  if (!ENABLE_DEBUG_SERIAL)
+  if (line == nullptr || line[0] == '\0')
   {
     return;
   }
 
+  snprintf(logState.lines[logState.head], DEBUG_LOG_LINE_MAX, "%s", line);
+  logState.times[logState.head] = millis();
+  logState.head = (uint16_t)((logState.head + 1) % DEBUG_LOG_CAPACITY);
+  if (logState.count < DEBUG_LOG_CAPACITY)
+  {
+    logState.count++;
+  }
+}
+
+void pruneLogStreamClients()
+{
+  for (uint8_t i = 0; i < LOG_STREAM_CLIENT_CAPACITY; i++)
+  {
+    if (!logStreamClients[i].active)
+      continue;
+    if (logStreamClients[i].client.connected())
+      continue;
+    logStreamClients[i].client.stop();
+    logStreamClients[i].active = false;
+  }
+}
+
+void broadcastLogLineToStream(const char *line)
+{
+  pruneLogStreamClients();
+  const uint32_t ts = millis();
+  for (uint8_t i = 0; i < LOG_STREAM_CLIENT_CAPACITY; i++)
+  {
+    if (!logStreamClients[i].active)
+      continue;
+    WiFiClient &client = logStreamClients[i].client;
+    client.print("event: log\n");
+    client.print("data: ");
+    client.print(ts);
+    client.print('|');
+    client.print(line);
+    client.print("\n\n");
+    client.flush();
+    if (!client.connected())
+    {
+      client.stop();
+      logStreamClients[i].active = false;
+    }
+  }
+}
+
+static String logTagClassForName(const String &tag);
+static String logLevelClassForLine(const String &line);
+static String renderDebugLogLine(const char *line, uint32_t tsMs);
+
+static String formatRelativeUptime(uint32_t elapsedMs)
+{
+  uint32_t totalSeconds = elapsedMs / 1000UL;
+  uint32_t days = totalSeconds / 86400UL;
+  totalSeconds %= 86400UL;
+  uint32_t hours = totalSeconds / 3600UL;
+  totalSeconds %= 3600UL;
+  uint32_t minutes = totalSeconds / 60UL;
+  uint32_t seconds = totalSeconds % 60UL;
+
+  char buf[32];
+  if (days > 0)
+  {
+    snprintf(buf, sizeof(buf), "+%ud %02uh %02um %02us", days, hours, minutes, seconds);
+  }
+  else if (hours > 0)
+  {
+    snprintf(buf, sizeof(buf), "+%02uh %02um %02us", hours, minutes, seconds);
+  }
+  else
+  {
+    snprintf(buf, sizeof(buf), "+%02um %02us", minutes, seconds);
+  }
+  return String(buf);
+}
+
+String buildDebugLogHtml()
+{
+  String html;
+  html.reserve(320 + (size_t)logState.count * 240);
+  html += "<div class='card' id='liveLogCard'><div class='log-head'>";
+  html += "<div><h2 style='margin:0'>Live log</h2><div class='soft'>Recent BMS/CAN events shown newest first.</div></div>";
+  html += "<div class='log-controls'>";
+  html += "<span class='tag tag-muted' id='logLiveState'>live</span>";
+  html += "<button type='button' class='log-btn' id='logToggle'>Pause</button>";
+  html += "<button type='button' class='log-btn log-follow active' id='logFollowToggle'>Follow live</button>";
+  html += "<button type='button' class='log-filter log-filter-bms active' data-filter-tag='BMS'>BMS</button>";
+  html += "<button type='button' class='log-filter log-filter-can active' data-filter-tag='CAN'>CAN</button>";
+  html += "<button type='button' class='log-filter log-filter-stat active' data-filter-tag='STAT'>STAT</button>";
+  html += "<button type='button' class='log-filter log-filter-cfg active' data-filter-tag='CFG'>CFG</button>";
+  html += "<button type='button' class='log-filter log-filter-boot active' data-filter-tag='BOOT'>BOOT</button>";
+  html += "<button type='button' class='log-filter log-filter-wifi active' data-filter-tag='WIFI'>WIFI</button>";
+  html += "<button type='button' class='log-filter log-filter-http active' data-filter-tag='HTTP'>HTTP</button>";
+  html += "<button type='button' class='log-filter log-filter-ota active' data-filter-tag='OTA'>OTA</button>";
+  html += "<button type='button' class='log-filter log-filter-ap active' data-filter-tag='AP'>AP</button>";
+  html += "<button type='button' class='log-filter log-filter-dbg active' data-filter-tag='D'>DBG</button>";
+  html += "<button type='button' class='log-filter log-filter-gen active' data-filter-tag='GEN'>GEN</button>";
+  html += "<button type='button' class='log-filter log-filter-toggle active' id='logHideAll'>Hide all</button>";
+  html += "</div>";
+  html += "</div>";
+  html += "<div class='log-wrap'>";
+  if (logState.count == 0)
+  {
+    html += "<div class='soft'>No log entries yet.</div>";
+  }
+  else
+  {
+    for (uint16_t i = 0; i < logState.count; i++)
+    {
+      uint16_t index = (uint16_t)((logState.head + DEBUG_LOG_CAPACITY - 1 - i) % DEBUG_LOG_CAPACITY);
+      html += renderDebugLogLine(logState.lines[index], logState.times[index]);
+    }
+  }
+  html += "</div></div>";
+  return html;
+}
+
+static String logTagClassForName(const String &tag)
+{
+  if (tag == "BMS")
+    return "log-tag-bms";
+  if (tag == "CAN")
+    return "log-tag-can";
+  if (tag == "CFG")
+    return "log-tag-cfg";
+  if (tag == "BOOT")
+    return "log-tag-boot";
+  if (tag == "WIFI")
+    return "log-tag-wifi";
+  if (tag == "HTTP")
+    return "log-tag-http";
+  if (tag == "OTA")
+    return "log-tag-ota";
+  if (tag == "AP")
+    return "log-tag-ap";
+  if (tag == "STAT")
+    return "log-tag-stat";
+  if (tag == "D")
+    return "log-tag-debug";
+  return "log-tag-gen";
+}
+
+static String logLevelClassForLine(const String &line)
+{
+  String lower = line;
+  lower.toLowerCase();
+  if (lower.indexOf("fail") >= 0 || lower.indexOf("error") >= 0 || lower.indexOf("timeout") >= 0 || lower.indexOf("offline") >= 0 || lower.indexOf("bus-off") >= 0)
+    return "log-line-bad";
+  if (lower.indexOf("ok") >= 0 || lower.indexOf("success") >= 0 || lower.indexOf("started") >= 0 || lower.indexOf("connected") >= 0)
+    return "log-line-ok";
+  if (lower.indexOf("warn") >= 0 || lower.indexOf("disabled") >= 0 || lower.indexOf("fallback") >= 0)
+    return "log-line-warn";
+  return "log-line-soft";
+}
+
+static String renderDebugLogLine(const char *line, uint32_t tsMs)
+{
+  String raw = String(line);
+  String tag = "GEN";
+  String message = raw;
+  if (raw.startsWith("["))
+  {
+    int end = raw.indexOf(']');
+    if (end > 1)
+    {
+      tag = raw.substring(1, end);
+      message = raw.substring(end + 1);
+      if (message.startsWith(" "))
+      {
+        message.remove(0, 1);
+      }
+    }
+  }
+
+  String html;
+  html.reserve(raw.length() + 96);
+  html += "<div class='log-line ";
+  html += logLevelClassForLine(raw);
+  html += "' data-tag='";
+  html += htmlEscape(tag);
+  html += "'><span class='log-time'>";
+  html += htmlEscape(formatRelativeUptime(tsMs));
+  html += "</span><span class='log-tag ";
+  html += logTagClassForName(tag);
+  html += "'>";
+  html += htmlEscape(tag);
+  html += "</span><span class='log-msg'>";
+  html += htmlEscape(message);
+  html += "</span></div>";
+  return html;
+}
+
+void debugPrintf(const char *fmt, ...)
+{
   char buffer[256];
   va_list args;
   va_start(args, fmt);
   vsnprintf(buffer, sizeof(buffer), fmt, args);
   va_end(args);
-  Serial.println(buffer);
+  appendDebugLog(buffer);
+  broadcastLogLineToStream(buffer);
+  if (!ENABLE_DEBUG_SERIAL)
+  {
+    return;
+  }
+  Serial.printf("[D] %s\n", buffer);
 }
 
 String canStateText(twai_state_t state)
@@ -1131,6 +1353,7 @@ bool requestBmsData(uint8_t slaveId)
   uint16_t crc = getModbusCRC(req, 6);
   req[6] = crc & 0xFF;
   req[7] = (crc >> 8) & 0xFF;
+  debugPrintf("[BMS] poll slave=%u tx=%s", slaveId, formatByteBuffer(req, sizeof(req)).c_str());
 
   digitalWrite(cfg.bmsDePin, HIGH);
   delayMicroseconds(50);
@@ -1157,6 +1380,11 @@ bool requestBmsData(uint8_t slaveId)
   if (dbg.lastResponseLen > 0)
   {
     memcpy(dbg.lastResponse, res, dbg.lastResponseLen);
+  }
+
+  if (idx > 0 && ENABLE_DEBUG_RAW_FRAMES)
+  {
+    debugPrintf("[BMS] rx slave=%u len=%d frame=%s", slaveId, idx, formatByteBuffer(res, idx).c_str());
   }
 
   if (idx < 5)
@@ -1262,6 +1490,13 @@ void sendCanFrame(uint32_t id, uint8_t len, uint8_t *data)
     message.data[i] = data[i];
   }
   dbg.lastCanTxResult = twai_transmit(&message, pdMS_TO_TICKS(10));
+  if (ENABLE_DEBUG_SERIAL)
+  {
+    debugPrintf("[CAN] tx id=0x%03lX len=%u data=%s",
+                (unsigned long)id,
+                len,
+                formatByteBuffer(data, len).c_str());
+  }
   if (dbg.lastCanTxResult != ESP_OK)
   {
     dbg.canTxFail++;
@@ -1284,6 +1519,12 @@ void sendDeyeCanTelemetry()
   {
     return;
   }
+
+  debugPrintf("[CAN] telemetry packV=%.2f current=%.2f SOC=%d SOH=%d",
+              bms.packV,
+              bms.current,
+              bms.soc,
+              bms.soh);
 
   uint16_t avgSoc = (uint16_t)bms.soc;
   uint16_t outV = (uint16_t)(bms.packV * 100.0f);
@@ -1344,11 +1585,11 @@ String buildDiagHtml(uint16_t refreshSeconds)
   html.replace("__DEBUG_LAST_FRAME_LEN__", String(dbg.lastFrameLen));
   html.replace("__DEBUG_TEMP_SENSORS__", formatIntArray(bms.tempSensors, bms.tempSensorCount));
   html.replace("__DEBUG_TEMP_SENSOR_COUNT__", String(bms.tempSensorCount));
-  String diagBlocks = buildDiagRawRegistersHtml();
-  diagBlocks += buildDiagLastBmsFrameHtml();
+  String diagBlocks;
+  diagBlocks.reserve(1024);
+  diagBlocks += buildDiagRawRegistersHtml();
   diagBlocks += buildDiagCanHtml();
-  html.replace("__RAW_REGS__", diagBlocks);
-  html.replace("__LAST_BMS_FRAME__", "");
+  html.replace("__DIAG_BLOCKS__", diagBlocks);
   return html;
 }
 
@@ -1592,6 +1833,59 @@ void handleDiag()
   server.send(200, "text/html", buildDiagHtml(refreshSeconds));
 }
 
+void handleLog()
+{
+  server.send(200, "text/html", buildDebugLogHtml());
+}
+
+void handleLogStream()
+{
+  WiFiClient client = server.client();
+  client.print("HTTP/1.1 200 OK\r\n");
+  client.print("Content-Type: text/event-stream\r\n");
+  client.print("Cache-Control: no-cache\r\n");
+  client.print("Connection: keep-alive\r\n");
+  client.print("Access-Control-Allow-Origin: *\r\n\r\n");
+  client.print(": connected\n\n");
+  client.flush();
+  pruneLogStreamClients();
+  for (uint8_t i = 0; i < LOG_STREAM_CLIENT_CAPACITY; i++)
+  {
+    if (logStreamClients[i].active)
+      continue;
+    logStreamClients[i].client = client;
+    logStreamClients[i].active = true;
+    logStreamHeartbeatAtMs = millis();
+    return;
+  }
+  logStreamClients[0].client.stop();
+  logStreamClients[0].client = client;
+  logStreamClients[0].active = true;
+  logStreamHeartbeatAtMs = millis();
+}
+
+void maintainLogStreamClients()
+{
+  pruneLogStreamClients();
+  unsigned long now = millis();
+  if (now - logStreamHeartbeatAtMs < 15000UL)
+    return;
+  logStreamHeartbeatAtMs = now;
+  for (uint8_t i = 0; i < LOG_STREAM_CLIENT_CAPACITY; i++)
+  {
+    if (!logStreamClients[i].active)
+      continue;
+    WiFiClient &client = logStreamClients[i].client;
+    client.print(": ping\n\n");
+    client.flush();
+    if (!client.connected())
+    {
+      client.stop();
+      logStreamClients[i].active = false;
+    }
+  }
+}
+
 void fillTelemetryJson(JsonObject root)
 {
   JsonObject system = root.createNestedObject("system");
@@ -1796,6 +2090,8 @@ void setup()
   server.on("/reset", HTTP_POST, handleReset);
   server.on("/update", HTTP_POST, handleFirmwareUpdate, handleFirmwareUpdateUpload);
   server.on("/diag", handleDiag);
+  server.on("/log", handleLog);
+  server.on("/log-stream", handleLogStream);
   server.on("/json", handleJson);
   server.onNotFound(handleNotFound);
   server.begin();
@@ -1858,6 +2154,7 @@ void loop()
   if (cfg.enableDeyeCan && bms.online)
     sendDeyeCanTelemetry();
 
+  maintainLogStreamClients();
   server.handleClient();
   delay(1);
 }

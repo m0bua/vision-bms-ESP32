@@ -323,6 +323,51 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   .tag-warn{background:#3d3415;color:#fff2ba;border-color:#7f6a20;}
   .tag-protect{background:#3c1818;color:#ffd0d0;border-color:#7f2e2e;}
   .soft{color:var(--muted);}
+  .log-wrap{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#141414;font-family:Consolas,Monaco,'Courier New',monospace;font-size:12px;line-height:1.45;max-height:360px}
+  .log-wrap.live{overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable}
+  .log-wrap.paused{overflow:auto}
+  .log-head{display:flex;flex-direction:column;gap:10px}
+  .log-head h2{margin:0}
+  .log-controls{display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:nowrap;min-width:0;overflow-x:auto;overflow-y:hidden;padding-bottom:2px}
+  #logLiveState{min-width:11ch;text-align:center;justify-content:center;display:inline-flex}
+  .log-line{display:flex;gap:10px;align-items:flex-start;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05);word-break:break-word}
+  .log-line:last-child{border-bottom:0}
+  .log-time{flex:0 0 auto;min-width:9ch;color:var(--muted);font-size:11px;letter-spacing:.02em}
+  .log-tag{flex:0 0 auto;min-width:58px;text-align:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.04em;border:1px solid transparent}
+  .log-msg{flex:1 1 auto;white-space:pre-wrap}
+  .log-tag-bms{background:#183047;color:#cfe7ff;border-color:#316590}
+  .log-tag-can{background:#17392f;color:#c7f5e2;border-color:#2c7a68}
+  .log-tag-cfg{background:#332b17;color:#ffe6ad;border-color:#816520}
+  .log-tag-boot{background:#2f233e;color:#eadcff;border-color:#6e5a8f}
+  .log-tag-wifi{background:#142f2d;color:#c8f0ec;border-color:#2a736f}
+  .log-tag-http{background:#262626;color:#e4e4e4;border-color:#555}
+  .log-tag-ota{background:#3b1f2a;color:#ffd7e5;border-color:#8a425f}
+  .log-tag-ap{background:#2b2a16;color:#f4efb0;border-color:#77712e}
+  .log-tag-stat{background:#1d2d1d;color:#d7f0d7;border-color:#4f7b4f}
+  .log-tag-debug{background:#202020;color:#d2d2d2;border-color:#555}
+  .log-tag-gen{background:#262626;color:#dcdcdc;border-color:#555}
+  .log-line-ok .log-msg{color:var(--ok)}
+  .log-line-bad .log-msg{color:var(--bad)}
+  .log-line-warn .log-msg{color:var(--warn)}
+  .log-line-soft .log-msg{color:#cfcfcf}
+  .log-btn{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:6px 12px;border-radius:999px;font:inherit;font-size:12px;cursor:pointer}
+  .log-btn:hover{border-color:var(--accent)}
+  .log-follow.active{background:#1d2d1d;border-color:#4f7b4f;color:#d7f0d7}
+  .log-filter{appearance:none;border:1px solid var(--line);background:#222;color:var(--muted);padding:5px 10px;border-radius:999px;font:inherit;font-size:11px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
+  .log-filter.active{color:var(--text);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.06)}
+  .log-filter-bms.active{background:#183047;border-color:#316590;color:#cfe7ff}
+  .log-filter-can.active{background:#17392f;border-color:#2c7a68;color:#c7f5e2}
+  .log-filter-stat.active{background:#1d2d1d;border-color:#4f7b4f;color:#d7f0d7}
+  .log-filter-cfg.active{background:#332b17;border-color:#816520;color:#ffe6ad}
+  .log-filter-boot.active{background:#2f233e;border-color:#6e5a8f;color:#eadcff}
+  .log-filter-wifi.active{background:#142f2d;border-color:#2a736f;color:#c8f0ec}
+  .log-filter-http.active{background:#262626;border-color:#555;color:#e4e4e4}
+  .log-filter-ota.active{background:#3b1f2a;border-color:#8a425f;color:#ffd7e5}
+  .log-filter-ap.active{background:#2b2a16;border-color:#77712e;color:#f4efb0}
+  .log-filter-dbg.active{background:#202020;border-color:#555;color:#d2d2d2}
+  .log-filter-gen.active{background:#262626;border-color:#555;color:#dcdcdc}
+  .log-filter-toggle.active{background:#43381a;border-color:#8f7a33;color:#fff2ba}
+  .log-filter:hover{border-color:var(--accent)}
 </style></head><body data-refresh-seconds='__REFRESH_SECONDS__'>
 <div class='card'>
   <h1>Diagnostics</h1>
@@ -339,15 +384,15 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   <div>Cell count: __CELL_COUNT__</div>
   <div>Temp sensors: __DEBUG_TEMP_SENSOR_COUNT__ | Raw: <span class='muted'>__DEBUG_TEMP_SENSORS__</span></div>
   <div>CRC rx: __CRC_RX__ | CRC calc: __CRC_CALC__</div>
-  <div style='margin-top:12px;padding-top:12px;border-top:1px solid var(--line)'>
-    <div class='flag-title'>Debug</div>
-    <div>Polls: __DEBUG_POLL_COUNT__ | Success: __DEBUG_SUCCESS_COUNT__ | Fail: __DEBUG_FAIL_COUNT__</div>
-    <div>Last fail: <span class='tag tag-muted'>__DEBUG_LAST_FAIL__</span></div>
-    <div>Last poll: __DEBUG_LAST_POLL_MS__ ms | Last frame len: __DEBUG_LAST_FRAME_LEN__</div>
-  </div>
 </div>
-__RAW_REGS__
-__LAST_BMS_FRAME__
+<div id='liveLogHost'><div class='card'><div class='soft'>Loading live log...</div></div></div>
+<div class='card' style='margin-top:16px'>
+  <div class='flag-title'>Debug</div>
+  <div>Polls: __DEBUG_POLL_COUNT__ | Success: __DEBUG_SUCCESS_COUNT__ | Fail: __DEBUG_FAIL_COUNT__</div>
+  <div>Last fail: <span class='tag tag-muted'>__DEBUG_LAST_FAIL__</span></div>
+  <div>Last poll: __DEBUG_LAST_POLL_MS__ ms | Last frame len: __DEBUG_LAST_FRAME_LEN__</div>
+</div>
+__DIAG_BLOCKS__
 <script>
   const refreshSeconds = Number(document.body.dataset.refreshSeconds || 0);
   const toggleRefresh = () => {
@@ -363,6 +408,299 @@ __LAST_BMS_FRAME__
     if (event.target.closest('a, button, input, textarea, select, label')) return;
     toggleRefresh();
   });
+
+  const liveLogHost = document.getElementById('liveLogHost');
+  const logStateKey = 'bms.logPaused';
+  const logFollowKey = 'bms.logFollow';
+  const logFiltersKey = 'bms.logFilters';
+  const autoRefreshEnabled = new URL(window.location.href).searchParams.has('upd');
+  const allLogTags = ['BMS', 'CAN', 'STAT', 'CFG', 'BOOT', 'WIFI', 'HTTP', 'OTA', 'AP', 'D', 'GEN'];
+  const defaultFilterState = Object.fromEntries(allLogTags.map((tag) => [tag, true]));
+  let logPaused = localStorage.getItem(logStateKey) === '1';
+  let logFollow = localStorage.getItem(logFollowKey);
+  logFollow = logFollow === null ? true : logFollow === '1';
+  let logFilters = (() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(logFiltersKey) || 'null');
+      if (parsed && typeof parsed === 'object') {
+        return { ...defaultFilterState, ...parsed };
+      }
+    } catch (e) {}
+    return { ...defaultFilterState };
+  })();
+  let logSource = null;
+
+  const logTagClassForName = (tag) => {
+    const upper = String(tag || 'GEN').toUpperCase();
+    if (upper === 'BMS') return 'log-tag-bms';
+    if (upper === 'CAN') return 'log-tag-can';
+    if (upper === 'CFG') return 'log-tag-cfg';
+    if (upper === 'BOOT') return 'log-tag-boot';
+    if (upper === 'WIFI') return 'log-tag-wifi';
+    if (upper === 'HTTP') return 'log-tag-http';
+    if (upper === 'OTA') return 'log-tag-ota';
+    if (upper === 'AP') return 'log-tag-ap';
+    if (upper === 'STAT') return 'log-tag-stat';
+    if (upper === 'D') return 'log-tag-debug';
+    return 'log-tag-gen';
+  };
+
+  const inferLogLevelClass = (line) => {
+    const lower = String(line || '').toLowerCase();
+    if (lower.includes('fail') || lower.includes('error') || lower.includes('timeout') || lower.includes('offline') || lower.includes('bus-off')) {
+      return 'log-line-bad';
+    }
+    if (lower.includes('ok') || lower.includes('success') || lower.includes('started') || lower.includes('connected')) {
+      return 'log-line-ok';
+    }
+    if (lower.includes('warn') || lower.includes('disabled') || lower.includes('fallback')) {
+      return 'log-line-warn';
+    }
+    return 'log-line-soft';
+  };
+
+  const parseLogLine = (raw) => {
+    const line = String(raw || '');
+    let time = '';
+    let payload = line;
+    const sep = line.indexOf('|');
+    if (sep > 0) {
+      const prefix = line.slice(0, sep);
+      if (/^\d+$/.test(prefix)) {
+        time = formatElapsed(prefix);
+        payload = line.slice(sep + 1);
+      }
+    }
+    let tag = 'GEN';
+    let message = payload;
+    if (payload.startsWith('[')) {
+      const end = payload.indexOf(']');
+      if (end > 1) {
+        tag = payload.slice(1, end);
+        message = payload.slice(end + 1).trimStart();
+      }
+    }
+    const el = document.createElement('div');
+    el.className = 'log-line ' + inferLogLevelClass(payload);
+    el.dataset.tag = tag.toUpperCase();
+
+    const timeEl = document.createElement('span');
+    timeEl.className = 'log-time';
+    timeEl.textContent = time || '';
+
+    const tagEl = document.createElement('span');
+    tagEl.className = 'log-tag ' + logTagClassForName(tag);
+    tagEl.textContent = tag;
+
+    const msgEl = document.createElement('span');
+    msgEl.className = 'log-msg';
+    msgEl.textContent = message;
+
+    el.appendChild(timeEl);
+    el.appendChild(tagEl);
+    el.appendChild(msgEl);
+    return el;
+  };
+
+  const formatElapsed = (value) => {
+    const totalSeconds = Math.max(0, Math.floor(Number(value || 0) / 1000));
+    const days = Math.floor(totalSeconds / 86400);
+    let rem = totalSeconds % 86400;
+    const hours = Math.floor(rem / 3600);
+    rem %= 3600;
+    const minutes = Math.floor(rem / 60);
+    const seconds = rem % 60;
+    if (days > 0) {
+      return `+${days}d ${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+    }
+    if (hours > 0) {
+      return `+${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+    }
+    return `+${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+  };
+
+  const isAnyFilterEnabled = () => allLogTags.some((tag) => logFilters[tag] !== false);
+  const isAllFilterEnabled = () => allLogTags.every((tag) => logFilters[tag] !== false);
+
+  const updateFilterButtons = () => {
+    if (!liveLogHost) return;
+    const hideAllButton = liveLogHost.querySelector('#logHideAll');
+    if (hideAllButton) {
+      const anyVisible = isAnyFilterEnabled();
+      const allVisible = isAllFilterEnabled();
+      hideAllButton.textContent = anyVisible ? 'Hide all' : 'Show all';
+      hideAllButton.className = 'log-filter log-filter-toggle' + (!allVisible ? ' active' : '');
+    }
+    liveLogHost.querySelectorAll('[data-filter-tag]').forEach((btn) => {
+      const tag = (btn.dataset.filterTag || 'GEN').toUpperCase();
+      const enabled = logFilters[tag] !== false;
+      btn.className = 'log-filter ' + logTagClassForName(tag).replace('log-tag-', 'log-filter-') + (enabled ? ' active' : '');
+    });
+  };
+
+  const applyLogFilters = () => {
+    if (!liveLogHost) return;
+    liveLogHost.querySelectorAll('.log-line').forEach((line) => {
+      const tag = (line.dataset.tag || 'GEN').toUpperCase();
+      line.style.display = logFilters[tag] !== false ? '' : 'none';
+    });
+  };
+
+  const syncLiveScroll = (wrap, beforeScrollTop, beforeScrollHeight) => {
+    if (logFollow) {
+      wrap.scrollTop = 0;
+      return;
+    }
+    const delta = wrap.scrollHeight - beforeScrollHeight;
+    const nearTop = beforeScrollTop <= 24;
+    wrap.scrollTop = nearTop ? 0 : Math.max(0, beforeScrollTop + delta);
+  };
+
+  const setLogUi = () => {
+    const button = document.getElementById('logToggle');
+    const followButton = document.getElementById('logFollowToggle');
+    const state = document.getElementById('logLiveState');
+    const logWrap = liveLogHost ? liveLogHost.querySelector('.log-wrap') : null;
+    const controls = liveLogHost ? liveLogHost.querySelector('.log-controls') : null;
+    if (button) {
+      button.textContent = logPaused ? 'Resume' : 'Pause';
+      button.style.display = autoRefreshEnabled ? 'none' : '';
+    }
+    if (followButton) {
+      followButton.textContent = logFollow ? 'Follow live' : 'Browse';
+      followButton.className = 'log-btn log-follow' + (logFollow ? ' active' : '');
+      followButton.style.display = autoRefreshEnabled ? 'none' : '';
+    }
+    if (state) {
+      state.style.display = autoRefreshEnabled ? 'none' : '';
+      state.textContent = logPaused ? 'paused' : 'live';
+      state.className = 'tag ' + (logPaused ? 'tag-warn' : 'tag-status');
+    }
+    if (controls) {
+      controls.style.display = autoRefreshEnabled ? 'none' : '';
+    }
+    if (logWrap) {
+      logWrap.classList.toggle('live', !logPaused);
+      logWrap.classList.toggle('paused', logPaused);
+    }
+    updateFilterButtons();
+    applyLogFilters();
+  };
+
+  const closeLogStream = () => {
+    if (logSource) {
+      logSource.close();
+      logSource = null;
+    }
+  };
+
+  const openLogStream = () => {
+    if (autoRefreshEnabled || logPaused || !window.EventSource || logSource) return;
+    closeLogStream();
+    try {
+      logSource = new EventSource('/log-stream');
+      logSource.onopen = () => {
+        const state = document.getElementById('logLiveState');
+        if (state) {
+          state.textContent = 'live';
+          state.className = 'tag tag-status';
+          state.style.display = autoRefreshEnabled ? 'none' : '';
+        }
+      };
+      logSource.addEventListener('log', (event) => {
+        if (logPaused || !liveLogHost) return;
+        const wrap = liveLogHost.querySelector('.log-wrap');
+        if (!wrap) return;
+        const beforeScrollTop = wrap.scrollTop;
+        const beforeScrollHeight = wrap.scrollHeight;
+        const empty = wrap.querySelector('.soft');
+        if (empty) empty.remove();
+        wrap.insertBefore(parseLogLine(event.data), wrap.firstChild);
+        syncLiveScroll(wrap, beforeScrollTop, beforeScrollHeight);
+        applyLogFilters();
+      });
+      logSource.onerror = () => {
+        if (autoRefreshEnabled || logPaused) return;
+        const state = document.getElementById('logLiveState');
+        if (state) {
+          state.textContent = 'reconnecting';
+          state.className = 'tag tag-warn';
+          state.style.display = autoRefreshEnabled ? 'none' : '';
+        }
+      };
+    } catch (err) {
+      closeLogStream();
+    }
+  };
+
+  if (liveLogHost) {
+    liveLogHost.addEventListener('click', (event) => {
+      const target = event.target.closest('button');
+      if (!target) return;
+      if (target.id === 'logToggle') {
+        logPaused = !logPaused;
+        localStorage.setItem(logStateKey, logPaused ? '1' : '0');
+        setLogUi();
+        if (logPaused) {
+          closeLogStream();
+        } else {
+          openLogStream();
+        }
+        return;
+      }
+      if (target.id === 'logHideAll') {
+        const shouldShowAll = !isAnyFilterEnabled();
+        allLogTags.forEach((tag) => {
+          logFilters[tag] = shouldShowAll;
+        });
+        localStorage.setItem(logFiltersKey, JSON.stringify(logFilters));
+        setLogUi();
+        return;
+      }
+      if (target.id === 'logFollowToggle') {
+        logFollow = !logFollow;
+        localStorage.setItem(logFollowKey, logFollow ? '1' : '0');
+        setLogUi();
+        if (logFollow && !logPaused) {
+          const wrap = liveLogHost.querySelector('.log-wrap');
+          if (wrap) {
+            wrap.scrollTop = 0;
+          }
+        }
+        return;
+      }
+      const tag = target.dataset.filterTag;
+      if (!tag) return;
+      const upper = tag.toUpperCase();
+      logFilters[upper] = logFilters[upper] === false;
+      localStorage.setItem(logFiltersKey, JSON.stringify(logFilters));
+      setLogUi();
+    });
+  }
+
+  const startLiveLog = () => {
+    const mountLog = () => {
+      setLogUi();
+      if (autoRefreshEnabled) {
+        return;
+      }
+      openLogStream();
+    };
+    if (!liveLogHost) {
+      return;
+    }
+    fetch('/log', { cache: 'no-store' })
+      .then((response) => response.text())
+      .then((html) => {
+        liveLogHost.innerHTML = html;
+        mountLog();
+      })
+      .catch(() => {
+        liveLogHost.innerHTML = "<div class='card'><div class='soft'>Failed to load live log.</div></div>";
+      });
+  };
+
+  startLiveLog();
 </script>
 </body></html>
 )rawliteral";
