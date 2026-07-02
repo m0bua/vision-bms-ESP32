@@ -300,7 +300,10 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   body{__UI_THEME_BASE_VARS__padding:18px}
   __CUSTOM_CSS__
   #clickable{cursor:pointer;margin-bottom:.5em}
-  .card{max-width:1200px;margin:0 auto 16px auto;padding:16px}
+  .wrap{max-width:1100px;margin:0 auto}
+  .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px}
+  h1{margin:0;font-size:30px}
+  .card{margin:0 0 16px 0;padding:16px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
   .cell{padding:10px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);}
   .reg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(9em,1fr));gap:12px;margin-top:12px}
@@ -323,7 +326,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   .tag-warn{background:#3d3415;color:#fff2ba;border-color:#7f6a20;}
   .tag-protect{background:#3c1818;color:#ffd0d0;border-color:#7f2e2e;}
   .soft{color:var(--muted);}
-  .log-wrap{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#141414;font-family:Consolas,Monaco,'Courier New',monospace;font-size:12px;line-height:1.45;max-height:360px}
+  .log-wrap{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#141414;font-family:Consolas,Monaco,'Courier New',monospace;font-size:12px;line-height:1.45;height:360px;min-height:220px;max-height:75vh;resize:vertical;box-sizing:border-box}
   .log-wrap.live{overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable}
   .log-wrap.paused{overflow:auto}
   .log-head{display:flex;flex-direction:column;gap:10px}
@@ -346,10 +349,11 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   .log-tag-stat{background:#1d2d1d;color:#d7f0d7;border-color:#4f7b4f}
   .log-tag-debug{background:#202020;color:#d2d2d2;border-color:#555}
   .log-tag-gen{background:#262626;color:#dcdcdc;border-color:#555}
-  .log-line-ok .log-msg{color:var(--ok)}
   .log-line-bad .log-msg{color:var(--bad)}
   .log-line-warn .log-msg{color:var(--warn)}
   .log-line-soft .log-msg{color:#cfcfcf}
+  .log-line-rx .log-msg{color:#7dd3fc}
+  .log-line-tx .log-msg{color:#f9a8d4}
   .log-btn{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:6px 12px;border-radius:999px;font:inherit;font-size:12px;cursor:pointer}
   .log-btn:hover{border-color:var(--accent)}
   .log-follow.active{background:#1d2d1d;border-color:#4f7b4f;color:#d7f0d7}
@@ -368,31 +372,39 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   .log-filter-gen.active{background:#262626;border-color:#555;color:#dcdcdc}
   .log-filter-toggle.active{background:#43381a;border-color:#8f7a33;color:#fff2ba}
   .log-filter:hover{border-color:var(--accent)}
+  @media (max-width:560px){.hero{flex-direction:column;align-items:flex-start}}
 </style></head><body data-refresh-seconds='__REFRESH_SECONDS__'>
-<div class='card'>
-  <h1>Diagnostics</h1>
-  <div><a href='/'>Back to dashboard</a></div><br>
-  <div id='clickable' class='soft'>Auto refresh: __REFRESH_STATE__ | click to __REFRESH_ACTION__</div>
-  <div>Active ID: __ACTIVE_ID__ | Last tried: __LAST_TRIED__</div>
-  <div>Status: __ONLINE__ | Errors: __ERRORS__</div>
-  <div>Operating state: __OPERATING__</div>
-  <div>Health: <span class='__HEALTH_CLASS__'>__HEALTH_TEXT__</span></div>
-  <div>Status: __STATUS_HEX__ <span class='muted'>(__STATUS_TEXT__)</span></div>
-  <div>Warning: __WARNING_HEX__ <span class='muted'>(__WARNING_TEXT__)</span></div>
-  <div>Protect: __PROTECT_HEX__ <span class='muted'>(__PROTECT_TEXT__)</span></div>
-  <div>0x001A: __CYCLES__</div>
-  <div>Cell count: __CELL_COUNT__</div>
-  <div>Temp sensors: __DEBUG_TEMP_SENSOR_COUNT__ | Raw: <span class='muted'>__DEBUG_TEMP_SENSORS__</span></div>
-  <div>CRC rx: __CRC_RX__ | CRC calc: __CRC_CALC__</div>
+<div class='wrap'>
+  <div class='hero'>
+    <div>
+      <h1>Diagnostics</h1>
+    </div>
+    <div><a href='/'>Back to dashboard</a></div>
+  </div>
+  <div class='card'>
+    <div id='clickable' class='soft'>Auto refresh: __REFRESH_STATE__ | click to __REFRESH_ACTION__</div>
+    <div>CPU temp: __CPU_TEMP__</div>
+    <div>Active ID: __ACTIVE_ID__ | Last tried: __LAST_TRIED__</div>
+    <div>Status: __ONLINE__ | Errors: __ERRORS__</div>
+    <div>Operating state: __OPERATING__</div>
+    <div>Health: <span class='__HEALTH_CLASS__'>__HEALTH_TEXT__</span></div>
+    <div>Status: __STATUS_HEX__ <span class='muted'>(__STATUS_TEXT__)</span></div>
+    <div>Warning: __WARNING_HEX__ <span class='muted'>(__WARNING_TEXT__)</span></div>
+    <div>Protect: __PROTECT_HEX__ <span class='muted'>(__PROTECT_TEXT__)</span></div>
+    <div>0x001A: __CYCLES__</div>
+    <div>Cell count: __CELL_COUNT__</div>
+    <div>Temp sensors: __DEBUG_TEMP_SENSOR_COUNT__ | Raw: <span class='muted'>__DEBUG_TEMP_SENSORS__</span></div>
+    <div>CRC rx: __CRC_RX__ | CRC calc: __CRC_CALC__</div>
+  </div>
+  <div id='liveLogHost'><div class='card'><div class='soft'>Loading live log...</div></div></div>
+  <div class='card' style='margin-top:16px'>
+    <div class='flag-title'>Debug</div>
+    <div>Polls: __DEBUG_POLL_COUNT__ | Success: __DEBUG_SUCCESS_COUNT__ | Fail: __DEBUG_FAIL_COUNT__</div>
+    <div>Last fail: <span class='tag tag-muted'>__DEBUG_LAST_FAIL__</span></div>
+    <div>Last poll: __DEBUG_LAST_POLL_MS__ ms | Last frame len: __DEBUG_LAST_FRAME_LEN__</div>
+  </div>
+  __DIAG_BLOCKS__
 </div>
-<div id='liveLogHost'><div class='card'><div class='soft'>Loading live log...</div></div></div>
-<div class='card' style='margin-top:16px'>
-  <div class='flag-title'>Debug</div>
-  <div>Polls: __DEBUG_POLL_COUNT__ | Success: __DEBUG_SUCCESS_COUNT__ | Fail: __DEBUG_FAIL_COUNT__</div>
-  <div>Last fail: <span class='tag tag-muted'>__DEBUG_LAST_FAIL__</span></div>
-  <div>Last poll: __DEBUG_LAST_POLL_MS__ ms | Last frame len: __DEBUG_LAST_FRAME_LEN__</div>
-</div>
-__DIAG_BLOCKS__
 <script>
   const refreshSeconds = Number(document.body.dataset.refreshSeconds || 0);
   const toggleRefresh = () => {
@@ -445,18 +457,32 @@ __DIAG_BLOCKS__
     return 'log-tag-gen';
   };
 
-  const inferLogLevelClass = (line) => {
+  const inferLogToneClass = (line) => {
     const lower = String(line || '').toLowerCase();
-    if (lower.includes('fail') || lower.includes('error') || lower.includes('timeout') || lower.includes('offline') || lower.includes('bus-off')) {
+    const hasPositiveCounter = (key) => {
+      const pos = lower.indexOf(key);
+      if (pos < 0) return false;
+      let idx = pos + key.length;
+      while (idx < lower.length && lower[idx] === ' ') idx++;
+      if (idx >= lower.length) return false;
+      if (!/\d/.test(lower[idx])) return true;
+      return lower[idx] !== '0';
+    };
+    if (lower.includes('error') || lower.includes('timeout') || lower.includes('offline') || lower.includes('bus-off') || lower.includes('failed') || hasPositiveCounter('err=') || hasPositiveCounter('fail=')) {
       return 'log-line-bad';
-    }
-    if (lower.includes('ok') || lower.includes('success') || lower.includes('started') || lower.includes('connected')) {
-      return 'log-line-ok';
     }
     if (lower.includes('warn') || lower.includes('disabled') || lower.includes('fallback')) {
       return 'log-line-warn';
     }
     return 'log-line-soft';
+  };
+
+  const inferLogDirectionClass = (line) => {
+    const lower = String(line || '').toLowerCase();
+    const trimmed = lower.trimStart();
+    if (trimmed.startsWith('rx ') || trimmed.startsWith('rx:')) return 'log-line-rx';
+    if (trimmed.startsWith('tx ') || trimmed.startsWith('tx:')) return 'log-line-tx';
+    return '';
   };
 
   const parseLogLine = (raw) => {
@@ -481,7 +507,7 @@ __DIAG_BLOCKS__
       }
     }
     const el = document.createElement('div');
-    el.className = 'log-line ' + inferLogLevelClass(payload);
+    el.className = 'log-line ' + inferLogToneClass(payload) + ' ' + inferLogDirectionClass(message || payload);
     el.dataset.tag = tag.toUpperCase();
 
     const timeEl = document.createElement('span');

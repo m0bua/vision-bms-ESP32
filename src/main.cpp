@@ -527,7 +527,8 @@ void broadcastLogLineToStream(const char *line)
 }
 
 static String logTagClassForName(const String &tag);
-static String logLevelClassForLine(const String &line);
+static String logToneClassForLine(const String &line);
+static String logDirectionClassForLine(const String &line);
 static String renderDebugLogLine(const char *line, uint32_t tsMs);
 
 static String formatRelativeUptime(uint32_t elapsedMs)
@@ -622,17 +623,40 @@ static String logTagClassForName(const String &tag)
   return "log-tag-gen";
 }
 
-static String logLevelClassForLine(const String &line)
+static String logToneClassForLine(const String &line)
 {
   String lower = line;
   lower.toLowerCase();
-  if (lower.indexOf("fail") >= 0 || lower.indexOf("error") >= 0 || lower.indexOf("timeout") >= 0 || lower.indexOf("offline") >= 0 || lower.indexOf("bus-off") >= 0)
+  const auto hasPositiveCounter = [](const String &text, const char *key) -> bool {
+    int pos = text.indexOf(key);
+    if (pos < 0)
+      return false;
+    pos += (int)strlen(key);
+    while (pos < (int)text.length() && text[pos] == ' ')
+      pos++;
+    if (pos >= (int)text.length())
+      return false;
+    if (!isDigit((unsigned char)text[pos]))
+      return true;
+    return text[pos] != '0';
+  };
+  if (lower.indexOf("error") >= 0 || lower.indexOf("timeout") >= 0 || lower.indexOf("offline") >= 0 || lower.indexOf("bus-off") >= 0 || lower.indexOf("failed") >= 0 || hasPositiveCounter(lower, "err=") || hasPositiveCounter(lower, "fail="))
     return "log-line-bad";
-  if (lower.indexOf("ok") >= 0 || lower.indexOf("success") >= 0 || lower.indexOf("started") >= 0 || lower.indexOf("connected") >= 0)
-    return "log-line-ok";
   if (lower.indexOf("warn") >= 0 || lower.indexOf("disabled") >= 0 || lower.indexOf("fallback") >= 0)
     return "log-line-warn";
   return "log-line-soft";
+}
+
+static String logDirectionClassForLine(const String &line)
+{
+  String lower = line;
+  lower.toLowerCase();
+  lower.trim();
+  if (lower.startsWith("rx ") || lower.startsWith("rx:"))
+    return "log-line-rx";
+  if (lower.startsWith("tx ") || lower.startsWith("tx:"))
+    return "log-line-tx";
+  return "";
 }
 
 static String renderDebugLogLine(const char *line, uint32_t tsMs)
@@ -657,7 +681,13 @@ static String renderDebugLogLine(const char *line, uint32_t tsMs)
   String html;
   html.reserve(raw.length() + 96);
   html += "<div class='log-line ";
-  html += logLevelClassForLine(raw);
+  html += logToneClassForLine(raw);
+  String directionClass = logDirectionClassForLine(message);
+  if (!directionClass.isEmpty())
+  {
+    html += " ";
+    html += directionClass;
+  }
   html += "' data-tag='";
   html += htmlEscape(tag);
   html += "'><span class='log-time'>";
@@ -1560,6 +1590,7 @@ String buildDiagHtml(uint16_t refreshSeconds)
   html.replace("__REFRESH_SECONDS__", String(refreshSeconds));
   html.replace("__REFRESH_STATE__", refreshSeconds > 0 ? String("on (") + String(refreshSeconds) + " s)" : "off");
   html.replace("__REFRESH_ACTION__", refreshSeconds > 0 ? "disable" : "enable");
+  html.replace("__CPU_TEMP__", String(temperatureRead(), 1) + " &deg;C");
   html.replace("__ACTIVE_ID__", String(bms.activeSlaveId));
   html.replace("__LAST_TRIED__", String(bms.lastTriedSlaveId));
   html.replace("__ONLINE__", String(bms.online ? "ONLINE" : "OFFLINE"));
