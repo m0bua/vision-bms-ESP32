@@ -546,11 +546,12 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
       if (value.startsWith('none') || value.startsWith('off') || value.startsWith('ok')) return false;
       return true;
     };
+    const hasStandaloneFail = () => /(^|[^a-z0-9_])fail(?:\s|:|$)/.test(lower);
     const trimmed = lower.trim();
     if (lower.includes('error') || lower.includes('failed') || lower.includes('timeout') || lower.includes('offline') || lower.includes('bus-off') || lower.includes('fault') || hasPositiveCounter('err=')) {
       return 'log-kind-error';
     }
-    if (hasFailMarker() || lower.includes('failure') || lower.includes('failed') || (/\bfail\b/.test(lower) && !lower.includes('fail='))) {
+    if (hasFailMarker() || lower.includes('failure') || lower.includes('failed') || hasStandaloneFail()) {
       return 'log-kind-fail';
     }
     if (lower.includes('warn') || lower.includes('disabled') || lower.includes('fallback')) {
