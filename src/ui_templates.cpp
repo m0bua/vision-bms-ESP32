@@ -87,6 +87,7 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
     __CUSTOM_CSS__
     .wrap{max-width:1280px;margin:0 auto;padding:20px}
     .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px}
+    .hero-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:flex-end}
     h1{margin:0;font-size:28px}
     .sub{color:var(--muted);margin-top:6px}
     .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);color:var(--muted);font-size:12px}
@@ -115,17 +116,22 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
     @media (max-width:1100px){.grid-cells{grid-template-columns:repeat(3,minmax(0,1fr))}}
     @media (max-width:900px){.half{grid-column:span 12}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.grid-cells{grid-template-columns:repeat(5,minmax(0,1fr))}}
     @media (max-width:650px){.grid-cells{grid-template-columns:repeat(3,minmax(0,1fr))}}
-    @media (max-width:560px){.hero{flex-direction:column;align-items:flex-start}.stats{grid-template-columns:1fr}}
+    @media (max-width:560px){.hero{flex-direction:column;align-items:flex-start}.hero-actions{justify-content:flex-start}.stats{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="hero">
       <div>
-        <h1>BMS Dashboard</h1>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <h1>BMS Dashboard</h1>
+          <div class="pill" id="pollState">loading</div>
+        </div>
         <div class="sub">Vision V-LFP48100</div>
       </div>
-      <div class="pill" id="pollState">loading</div>
+      <div class="hero-actions">
+        __TOP_ACTION__
+      </div>
     </div>
 
     <div class="grid">
@@ -190,16 +196,6 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
         <div class="grid-cells" id="cellGrid"></div>
       </div>
 
-      <div class="card">
-        <div class="row" style="justify-content:space-between">
-          <div class="label">Links</div>
-          <div class="row">
-            <a href="/setup">Settings</a>
-            <a href="/diag">Diagnostic</a>
-            <a href="/json">JSON</a>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
   <script>
@@ -539,6 +535,18 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
     return `+${String(hours).padStart(5, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}s`;
   };
 
+  const logDomLimit = Number(__LOG_DOM_LIMIT__ || 1000);
+  const trimLogEntries = () => {
+    if (!liveLogHost) return;
+    const wrap = liveLogHost.querySelector('.log-wrap');
+    if (!wrap) return;
+    while (wrap.querySelectorAll('.log-line').length > logDomLimit) {
+      const lastLine = wrap.querySelector('.log-line:last-of-type');
+      if (!lastLine) break;
+      lastLine.remove();
+    }
+  };
+
   const isAnyFilterEnabled = () => allLogTags.some((tag) => logFilters[tag] !== false);
   const isAllFilterEnabled = () => allLogTags.every((tag) => logFilters[tag] !== false);
 
@@ -636,6 +644,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
         const empty = wrap.querySelector('.soft');
         if (empty) empty.remove();
         wrap.insertBefore(parseLogLine(event.data), wrap.firstChild);
+        trimLogEntries();
         syncLiveScroll(wrap, beforeScrollTop, beforeScrollHeight);
         applyLogFilters();
       });
@@ -701,6 +710,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   const startLiveLog = () => {
     const mountLog = () => {
       setLogUi();
+      trimLogEntries();
       if (autoRefreshEnabled) {
         return;
       }
@@ -868,6 +878,22 @@ extern const char SETUP_HTML[] PROGMEM = R"rawliteral(
               <div class='field full'>
                 <label for='custom_css'>Custom CSS</label>
                 <textarea id='custom_css' name='custom_css' placeholder='Add extra CSS rules here...'>__CUSTOM_CSS_TEXT__</textarea>
+              </div>
+            </div>
+          </section>
+
+          <section class='section'>
+            <h2 class='section-title'>Logs</h2>
+            <div class='section-grid'>
+              <div class='field third'>
+                <label for='log_buffer_size'>Device log buffer</label>
+                <input id='log_buffer_size' name='log_buffer_size' type='number' min='1' max='50' value='__LOG_BUFFER_SIZE__'>
+                <div class='note'>How many log entries are kept in RAM on the device.</div>
+              </div>
+              <div class='field third'>
+                <label for='log_dom_limit'>Browser log limit</label>
+                <input id='log_dom_limit' name='log_dom_limit' type='number' min='1' max='5000' value='__LOG_DOM_LIMIT__'>
+                <div class='note'>How many rendered rows the browser keeps before trimming old ones.</div>
               </div>
             </div>
           </section>

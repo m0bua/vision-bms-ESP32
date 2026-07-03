@@ -20,8 +20,12 @@ const IPAddress AP_IP(192, 168, 0, 1);
 const IPAddress AP_MASK(255, 255, 255, 0);
 constexpr unsigned long WIFI_CONNECT_TIMEOUT_MS = 15000UL;
 constexpr size_t CUSTOM_CSS_MAX_LEN = 1536;
-constexpr uint16_t DEBUG_LOG_CAPACITY = 300;
 constexpr size_t DEBUG_LOG_LINE_MAX = 192;
+constexpr uint16_t DEBUG_LOG_STORAGE_CAPACITY = 50;
+constexpr uint16_t LOG_BUFFER_SIZE_MIN = 1;
+constexpr uint16_t LOG_BUFFER_SIZE_MAX = DEBUG_LOG_STORAGE_CAPACITY;
+constexpr uint16_t LOG_DOM_LIMIT_MIN = 1;
+constexpr uint16_t LOG_DOM_LIMIT_MAX = 5000;
 
 #ifndef ENABLE_DEBUG_SERIAL
 constexpr bool ENABLE_DEBUG_SERIAL = true;
@@ -57,6 +61,9 @@ struct RuntimeConfig
   uint8_t preferredBmsId;
   uint8_t bmsIdMin;
   uint8_t bmsIdMax;
+
+  uint16_t logBufferSize;
+  uint16_t logDomLimit;
 
   char customCss[CUSTOM_CSS_MAX_LEN];
 };
@@ -167,8 +174,8 @@ BmsDebugState dbg;
 
 struct DebugLogState
 {
-  char lines[DEBUG_LOG_CAPACITY][DEBUG_LOG_LINE_MAX] = {};
-  uint32_t times[DEBUG_LOG_CAPACITY] = {};
+  char lines[DEBUG_LOG_STORAGE_CAPACITY][DEBUG_LOG_LINE_MAX] = {};
+  uint32_t times[DEBUG_LOG_STORAGE_CAPACITY] = {};
   uint16_t count = 0;
   uint16_t head = 0;
 };
@@ -353,6 +360,8 @@ void setDefaultConfig()
   cfg.preferredBmsId = 16;
   cfg.bmsIdMin = 1;
   cfg.bmsIdMax = 16;
+  cfg.logBufferSize = 50;
+  cfg.logDomLimit = 1000;
   cfg.customCss[0] = '\0';
 }
 
@@ -378,6 +387,14 @@ void sanitizeConfig()
   {
     cfg.preferredBmsId = cfg.bmsIdMax;
   }
+  if (cfg.logBufferSize < LOG_BUFFER_SIZE_MIN)
+    cfg.logBufferSize = 50;
+  if (cfg.logBufferSize > LOG_BUFFER_SIZE_MAX)
+    cfg.logBufferSize = LOG_BUFFER_SIZE_MAX;
+  if (cfg.logDomLimit < LOG_DOM_LIMIT_MIN)
+    cfg.logDomLimit = 1000;
+  if (cfg.logDomLimit > LOG_DOM_LIMIT_MAX)
+    cfg.logDomLimit = LOG_DOM_LIMIT_MAX;
   cfg.customCss[CUSTOM_CSS_MAX_LEN - 1] = '\0';
 }
 
@@ -415,6 +432,8 @@ bool loadConfig()
   cfg.preferredBmsId = (uint8_t)configPrefs.getUChar("pref_bms_id", 16);
   cfg.bmsIdMin = (uint8_t)configPrefs.getUChar("bms_id_min", 1);
   cfg.bmsIdMax = (uint8_t)configPrefs.getUChar("bms_id_max", 16);
+  cfg.logBufferSize = configPrefs.getUShort("log_buf_sz", 50);
+  cfg.logDomLimit = configPrefs.getUShort("log_dom_lim", 1000);
   configPrefs.end();
 
   sanitizeConfig();
@@ -439,6 +458,8 @@ void saveConfig()
   configPrefs.putUChar("pref_bms_id", cfg.preferredBmsId);
   configPrefs.putUChar("bms_id_min", cfg.bmsIdMin);
   configPrefs.putUChar("bms_id_max", cfg.bmsIdMax);
+  configPrefs.putUShort("log_buf_sz", cfg.logBufferSize);
+  configPrefs.putUShort("log_dom_lim", cfg.logDomLimit);
   configPrefs.putString("custom_css", cfg.customCss);
   configPrefs.end();
   configLoaded = true;
@@ -482,8 +503,9 @@ void appendDebugLog(const char *line)
 
   snprintf(logState.lines[logState.head], DEBUG_LOG_LINE_MAX, "%s", line);
   logState.times[logState.head] = millis();
-  logState.head = (uint16_t)((logState.head + 1) % DEBUG_LOG_CAPACITY);
-  if (logState.count < DEBUG_LOG_CAPACITY)
+  const uint16_t capacity = cfg.logBufferSize ? cfg.logBufferSize : 50;
+  logState.head = (uint16_t)((logState.head + 1) % capacity);
+  if (logState.count < capacity)
   {
     logState.count++;
   }
@@ -576,9 +598,10 @@ String buildDebugLogHtml()
   }
   else
   {
+    const uint16_t capacity = cfg.logBufferSize ? cfg.logBufferSize : 50;
     for (uint16_t i = 0; i < logState.count; i++)
     {
-      uint16_t index = (uint16_t)((logState.head + DEBUG_LOG_CAPACITY - 1 - i) % DEBUG_LOG_CAPACITY);
+      uint16_t index = (uint16_t)((logState.head + capacity - 1 - i) % capacity);
       html += renderDebugLogLine(logState.lines[index], logState.times[index]);
     }
   }
@@ -1601,6 +1624,7 @@ String buildDiagHtml(uint16_t refreshSeconds)
   html.replace("__DEBUG_LAST_FRAME_LEN__", String(dbg.lastFrameLen));
   html.replace("__DEBUG_TEMP_SENSORS__", formatIntArray(bms.tempSensors, bms.tempSensorCount));
   html.replace("__DEBUG_TEMP_SENSOR_COUNT__", String(bms.tempSensorCount));
+  html.replace("__LOG_DOM_LIMIT__", String(cfg.logDomLimit));
   String diagBlocks;
   diagBlocks.reserve(1024);
   diagBlocks += buildDiagRawRegistersHtml();
@@ -1637,6 +1661,8 @@ String buildSetupHtml()
   html.replace("__PREFERRED_BMS_ID__", String(cfg.preferredBmsId));
   html.replace("__BMS_ID_MIN__", String(cfg.bmsIdMin));
   html.replace("__BMS_ID_MAX__", String(cfg.bmsIdMax));
+  html.replace("__LOG_BUFFER_SIZE__", String(cfg.logBufferSize));
+  html.replace("__LOG_DOM_LIMIT__", String(cfg.logDomLimit));
   html.replace("__CUSTOM_CSS_TEXT__", htmlEscape(String(cfg.customCss)));
   return html;
 }
@@ -1648,6 +1674,7 @@ void handleDashboard()
   html.replace("__UI_SHARED_CSS__", String(FPSTR(UI_SHARED_CSS)));
   html.replace("__CUSTOM_CSS__", String(cfg.customCss));
   html.replace("__UI_SHARED_JS__", String(FPSTR(UI_SHARED_JS)));
+  html.replace("__TOP_ACTION__", String("<div><a href='/setup'>Settings</a> <a href='/diag'>Diagnostic</a> <a href='/json'>JSON</a></div>"));
   server.send(200, "text/html", html);
 }
 
@@ -1695,6 +1722,8 @@ void handleSave()
   cfg.preferredBmsId = (uint8_t)server.arg("preferred_bms_id").toInt();
   cfg.bmsIdMin = (uint8_t)server.arg("bms_id_min").toInt();
   cfg.bmsIdMax = (uint8_t)server.arg("bms_id_max").toInt();
+  cfg.logBufferSize = (uint16_t)server.arg("log_buffer_size").toInt();
+  cfg.logDomLimit = (uint16_t)server.arg("log_dom_limit").toInt();
   copyStringField(cfg.customCss, server.arg("custom_css"));
   sanitizeConfig();
   saveConfig();
