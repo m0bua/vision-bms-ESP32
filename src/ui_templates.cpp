@@ -322,38 +322,41 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   .tag-warn{background:#3d3415;color:#fff2ba;border-color:#7f6a20;}
   .tag-protect{background:#3c1818;color:#ffd0d0;border-color:#7f2e2e;}
   .soft{color:var(--muted);}
-  .log-wrap{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#141414;font-family:Consolas,Monaco,'Courier New',monospace;font-size:12px;line-height:1.45;height:360px;min-height:220px;max-height:75vh;resize:vertical;box-sizing:border-box}
+  .log-wrap{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:12px;background:rgba(20,20,20,.78);backdrop-filter:blur(6px);font-family:Consolas,Monaco,'Courier New',monospace;font-size:12px;line-height:1.45;height:360px;min-height:220px;max-height:75vh;resize:vertical;box-sizing:border-box}
   .log-wrap.live{overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable}
   .log-wrap.paused{overflow:auto}
   .log-head{display:flex;flex-direction:column;gap:10px}
   .log-head h2{margin:0}
-  .log-controls{display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:nowrap;min-width:0;overflow-x:auto;overflow-y:hidden;padding-bottom:2px}
+  .log-controls{display:flex;flex-direction:column;align-items:stretch;gap:8px;min-width:0}
+  .log-control-row{display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;min-width:0}
   #logLiveState{min-width:11ch;text-align:center;justify-content:center;display:inline-flex}
-  .log-line{display:flex;gap:10px;align-items:flex-start;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05);word-break:break-word}
+  .log-line{display:flex;gap:10px;align-items:flex-start;padding:5px .3em;border-bottom:1px solid rgba(255,255,255,0.05);word-break:break-word}
   .log-line:last-child{border-bottom:0}
   .log-time{flex:0 0 auto;min-width:18ch;color:var(--muted);font-size:11px;letter-spacing:.02em}
   .log-tag{flex:0 0 auto;min-width:58px;text-align:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.04em;border:1px solid transparent}
-  .log-msg{flex:1 1 auto;white-space:pre-wrap}
-  .log-tag-bms{background:#183047;color:#cfe7ff;border-color:#316590}
-  .log-tag-can{background:#17392f;color:#c7f5e2;border-color:#2c7a68}
-  .log-tag-cfg{background:#332b17;color:#ffe6ad;border-color:#816520}
-  .log-tag-boot{background:#2f233e;color:#eadcff;border-color:#6e5a8f}
-  .log-tag-wifi{background:#142f2d;color:#c8f0ec;border-color:#2a736f}
-  .log-tag-http{background:#262626;color:#e4e4e4;border-color:#555}
-  .log-tag-ota{background:#3b1f2a;color:#ffd7e5;border-color:#8a425f}
-  .log-tag-ap{background:#2b2a16;color:#f4efb0;border-color:#77712e}
-  .log-tag-stat{background:#1d2d1d;color:#d7f0d7;border-color:#4f7b4f}
-  .log-tag-debug{background:#202020;color:#d2d2d2;border-color:#555}
-  .log-tag-gen{background:#262626;color:#dcdcdc;border-color:#555}
-  .log-line-bad .log-msg{color:var(--bad)}
-  .log-line-warn .log-msg{color:var(--warn)}
-  .log-line-soft .log-msg{color:#cfcfcf}
-  .log-line-rx .log-msg{color:#7dd3fc}
-  .log-line-tx .log-msg{color:#f9a8d4}
+  .log-kind{flex:0 0 auto;min-width:72px;text-align:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.04em;border:1px solid transparent;color:#fff;background:rgba(42,42,42,.48)}
+  .log-msg{flex:1 1 auto;white-space:pre-wrap;color:var(--text)}
+  .log-tag-bms{background:rgba(24,48,71,.78);color:#cfe7ff;border-color:rgba(49,101,144,.8)}
+  .log-tag-can{background:rgba(23,57,47,.78);color:#c7f5e2;border-color:rgba(44,122,104,.8)}
+  .log-tag-cfg{background:rgba(51,43,23,.78);color:#ffe6ad;border-color:rgba(129,101,32,.8)}
+  .log-tag-boot{background:rgba(47,35,62,.78);color:#eadcff;border-color:rgba(110,90,143,.8)}
+  .log-tag-wifi{background:rgba(20,47,45,.78);color:#c8f0ec;border-color:rgba(42,115,111,.8)}
+  .log-tag-http{background:rgba(38,38,38,.78);color:#e4e4e4;border-color:rgba(85,85,85,.8)}
+  .log-tag-ota{background:rgba(59,31,42,.78);color:#ffd7e5;border-color:rgba(138,66,95,.8)}
+  .log-tag-ap{background:rgba(43,42,22,.78);color:#f4efb0;border-color:rgba(119,113,46,.8)}
+  .log-tag-stat{background:rgba(29,45,29,.78);color:#d7f0d7;border-color:rgba(79,123,79,.8)}
+  .log-tag-debug{background:rgba(32,32,32,.78);color:#d2d2d2;border-color:rgba(85,85,85,.8)}
+  .log-tag-gen{background:rgba(38,38,38,.78);color:#dcdcdc;border-color:rgba(85,85,85,.8)}
+  .log-kind-info{background:rgba(52,52,52,.48);border-color:rgba(102,102,102,.8)}
+  .log-kind-warning{background:rgba(122,90,23,.48);border-color:rgba(184,139,43,.8)}
+  .log-kind-fail{background:rgba(122,47,29,.48);border-color:rgba(192,90,62,.8)}
+  .log-kind-error{background:rgba(122,31,40,.48);border-color:rgba(184,71,85,.8)}
+  .log-kind-rx{background:rgba(31,79,120,.48);border-color:rgba(74,143,208,.8)}
+  .log-kind-tx{background:rgba(111,45,92,.48);border-color:rgba(179,90,154,.8)}
   .log-btn{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:6px 12px;border-radius:999px;font:inherit;font-size:12px;cursor:pointer}
   .log-btn:hover{border-color:var(--accent)}
   .log-follow.active{background:#1d2d1d;border-color:#4f7b4f;color:#d7f0d7}
-  .log-filter{appearance:none;border:1px solid var(--line);background:#222;color:var(--muted);padding:5px 10px;border-radius:999px;font:inherit;font-size:11px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
+  .log-filter{appearance:none;border:1px solid var(--line);background:rgba(34,34,34,.86);color:var(--muted);padding:5px 10px;border-radius:999px;font:inherit;font-size:11px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
   .log-filter.active{color:var(--text);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.06)}
   .log-filter-bms.active{background:#183047;border-color:#316590;color:#cfe7ff}
   .log-filter-can.active{background:#17392f;border-color:#2c7a68;color:#c7f5e2}
@@ -366,6 +369,12 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   .log-filter-ap.active{background:#2b2a16;border-color:#77712e;color:#f4efb0}
   .log-filter-dbg.active{background:#202020;border-color:#555;color:#d2d2d2}
   .log-filter-gen.active{background:#262626;border-color:#555;color:#dcdcdc}
+  .log-filter-info.active{background:rgba(52,52,52,.78);border-color:rgba(102,102,102,.8);color:#fff}
+  .log-filter-warning.active{background:rgba(122,90,23,.78);border-color:rgba(184,139,43,.85);color:#fff2ba}
+  .log-filter-fail.active{background:rgba(122,47,29,.78);border-color:rgba(192,90,62,.85);color:#ffd0c2}
+  .log-filter-error.active{background:rgba(122,31,40,.78);border-color:rgba(184,71,85,.85);color:#ffd4d9}
+  .log-filter-rx.active{background:rgba(31,79,120,.78);border-color:rgba(74,143,208,.85);color:#d8efff}
+  .log-filter-tx.active{background:rgba(111,45,92,.78);border-color:rgba(179,90,154,.85);color:#f4d5eb}
   .log-filter-toggle.active{background:#43381a;border-color:#8f7a33;color:#fff2ba}
   .log-filter:hover{border-color:var(--accent)}
   @media (max-width:560px){.hero{flex-direction:column;align-items:flex-start}}
@@ -392,7 +401,46 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
     <div>Temp sensors: __DEBUG_TEMP_SENSOR_COUNT__ | Raw: <span class='muted'>__DEBUG_TEMP_SENSORS__</span></div>
     <div>CRC rx: __CRC_RX__ | CRC calc: __CRC_CALC__</div>
   </div>
-  <div id='liveLogHost'><div class='card'><div class='soft'>Loading live log...</div></div></div>
+  <div id='liveLogHost'>
+    <div class='card' id='liveLogCard'>
+      <div class='log-head'>
+        <div><h2 style='margin:0'>Live log</h2></div>
+        <div class='log-controls'>
+          <div class='log-control-row'>
+            <span class='tag tag-muted' id='logLiveState'>live</span>
+            <button type='button' class='log-btn' id='logToggle'>Pause</button>
+            <button type='button' class='log-btn log-follow active' id='logFollowToggle'>Follow live</button>
+          </div>
+          <div class='log-control-row'>
+            <button type='button' class='log-filter log-filter-info active' data-filter-kind='info'>info</button>
+            <button type='button' class='log-filter log-filter-warning active' data-filter-kind='warning'>warning</button>
+            <button type='button' class='log-filter log-filter-fail active' data-filter-kind='fail'>fail</button>
+            <button type='button' class='log-filter log-filter-error active' data-filter-kind='error'>error</button>
+            <button type='button' class='log-filter log-filter-rx active' data-filter-kind='rx'>rx</button>
+            <button type='button' class='log-filter log-filter-tx active' data-filter-kind='tx'>tx</button>
+            <button type='button' class='log-filter log-filter-toggle active' id='logKindsToggle'>Hide kinds</button>
+          </div>
+          <div class='log-control-row'>
+            <button type='button' class='log-filter log-filter-bms active' data-filter-tag='BMS'>BMS</button>
+            <button type='button' class='log-filter log-filter-can active' data-filter-tag='CAN'>CAN</button>
+            <button type='button' class='log-filter log-filter-stat active' data-filter-tag='STAT'>STAT</button>
+            <button type='button' class='log-filter log-filter-cfg active' data-filter-tag='CFG'>CFG</button>
+            <button type='button' class='log-filter log-filter-boot active' data-filter-tag='BOOT'>BOOT</button>
+            <button type='button' class='log-filter log-filter-wifi active' data-filter-tag='WIFI'>WIFI</button>
+            <button type='button' class='log-filter log-filter-http active' data-filter-tag='HTTP'>HTTP</button>
+            <button type='button' class='log-filter log-filter-ota active' data-filter-tag='OTA'>OTA</button>
+            <button type='button' class='log-filter log-filter-ap active' data-filter-tag='AP'>AP</button>
+            <button type='button' class='log-filter log-filter-dbg active' data-filter-tag='D'>DBG</button>
+            <button type='button' class='log-filter log-filter-gen active' data-filter-tag='GEN'>GEN</button>
+            <button type='button' class='log-filter log-filter-toggle active' id='logTagsToggle'>Hide tags</button>
+          </div>
+        </div>
+      </div>
+      <div class='log-wrap'>
+        <div class='soft'>Loading live log...</div>
+      </div>
+    </div>
+  </div>
   <div class='card' style='margin-top:16px'>
     <h2 style="margin:0">Debug</h2>
     <div>Polls: __DEBUG_POLL_COUNT__ | Success: __DEBUG_SUCCESS_COUNT__ | Fail: __DEBUG_FAIL_COUNT__</div>
@@ -421,9 +469,12 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   const logStateKey = 'bms.logPaused';
   const logFollowKey = 'bms.logFollow';
   const logFiltersKey = 'bms.logFilters';
+  const logKindFiltersKey = 'bms.logKindFilters';
   const autoRefreshEnabled = new URL(window.location.href).searchParams.has('upd');
   const allLogTags = ['BMS', 'CAN', 'STAT', 'CFG', 'BOOT', 'WIFI', 'HTTP', 'OTA', 'AP', 'D', 'GEN'];
+  const allLogKinds = ['info', 'warning', 'fail', 'error', 'rx', 'tx'];
   const defaultFilterState = Object.fromEntries(allLogTags.map((tag) => [tag, true]));
+  const defaultKindFilterState = Object.fromEntries(allLogKinds.map((kind) => [kind, true]));
   let logPaused = localStorage.getItem(logStateKey) === '1';
   let logFollow = localStorage.getItem(logFollowKey);
   logFollow = logFollow === null ? true : logFollow === '1';
@@ -435,6 +486,20 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
       }
     } catch (e) {}
     return { ...defaultFilterState };
+  })();
+  let logKindFilters = (() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(logKindFiltersKey) || 'null');
+      if (parsed && typeof parsed === 'object') {
+        const merged = { ...defaultKindFilterState, ...parsed };
+        if (Object.prototype.hasOwnProperty.call(parsed, 'msg') && !Object.prototype.hasOwnProperty.call(parsed, 'info')) {
+          merged.info = parsed.msg;
+        }
+        delete merged.msg;
+        return merged;
+      }
+    } catch (e) {}
+    return { ...defaultKindFilterState };
   })();
   let logSource = null;
 
@@ -453,7 +518,18 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
     return 'log-tag-gen';
   };
 
-  const inferLogToneClass = (line) => {
+  const logKindClassForName = (kind) => {
+    const lower = String(kind || 'info').toLowerCase();
+    if (lower === 'warning') return 'log-kind-warning';
+    if (lower === 'fail') return 'log-kind-fail';
+    if (lower === 'error') return 'log-kind-error';
+    if (lower === 'info') return 'log-kind-info';
+    if (lower === 'rx') return 'log-kind-rx';
+    if (lower === 'tx') return 'log-kind-tx';
+    return 'log-kind-info';
+  };
+
+  const inferLogKindClass = (line) => {
     const lower = String(line || '').toLowerCase();
     const hasPositiveCounter = (key) => {
       const pos = lower.indexOf(key);
@@ -464,51 +540,58 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
       if (!/\d/.test(lower[idx])) return true;
       return lower[idx] !== '0';
     };
-    if (lower.includes('error') || lower.includes('timeout') || lower.includes('offline') || lower.includes('bus-off') || lower.includes('failed') || hasPositiveCounter('err=') || hasPositiveCounter('fail=')) {
-      return 'log-line-bad';
+    const trimmed = lower.trim();
+    if (lower.includes('error') || lower.includes('failed') || lower.includes('timeout') || lower.includes('offline') || lower.includes('bus-off') || lower.includes('fault') || hasPositiveCounter('err=')) {
+      return 'log-kind-error';
+    }
+    if (lower.includes('fail') || lower.includes('failure') || hasPositiveCounter('fail=')) {
+      return 'log-kind-fail';
     }
     if (lower.includes('warn') || lower.includes('disabled') || lower.includes('fallback')) {
-      return 'log-line-warn';
+      return 'log-kind-warning';
     }
-    return 'log-line-soft';
+    if (trimmed.startsWith('rx ') || trimmed.startsWith('rx:') || trimmed.startsWith('rx=') || lower.includes(' rx=')) return 'log-kind-rx';
+    if (trimmed.startsWith('tx ') || trimmed.startsWith('tx:') || trimmed.startsWith('tx=') || lower.includes(' tx=')) return 'log-kind-tx';
+    return 'log-kind-info';
   };
 
-  const inferLogDirectionClass = (line) => {
-    const lower = String(line || '').toLowerCase();
-    const trimmed = lower.trimStart();
-    if (trimmed.startsWith('rx ') || trimmed.startsWith('rx:')) return 'log-line-rx';
-    if (trimmed.startsWith('tx ') || trimmed.startsWith('tx:')) return 'log-line-tx';
-    return '';
-  };
-
-  const parseLogLine = (raw) => {
-    const line = String(raw || '');
-    let time = '';
-    let payload = line;
-    const sep = line.indexOf('|');
-    if (sep > 0) {
-      const prefix = line.slice(0, sep);
-      if (/^\d+$/.test(prefix)) {
-        time = formatElapsed(prefix);
-        payload = line.slice(sep + 1);
+  const normalizeLogEntry = (entry) => {
+    if (typeof entry === 'string') {
+      try {
+        return normalizeLogEntry(JSON.parse(entry));
+      } catch (e) {
+        return { ts: 0, line: entry };
       }
     }
+    if (!entry || typeof entry !== 'object') {
+      return { ts: 0, line: '' };
+    }
+    const ts = Number(entry.ts ?? entry.time_ms ?? entry.time ?? 0);
+    const line = String(entry.line ?? entry.raw ?? '');
+    return { ts: Number.isFinite(ts) ? ts : 0, line };
+  };
+
+  const createLogEntryElement = (entry) => {
+    const { ts, line } = normalizeLogEntry(entry);
     let tag = 'GEN';
-    let message = payload;
-    if (payload.startsWith('[')) {
-      const end = payload.indexOf(']');
+    let message = line;
+    if (line.startsWith('[')) {
+      const end = line.indexOf(']');
       if (end > 1) {
-        tag = payload.slice(1, end);
-        message = payload.slice(end + 1).trimStart();
+        tag = line.slice(1, end);
+        message = line.slice(end + 1).trimStart();
       }
     }
+    const kindClass = inferLogKindClass(message || line);
+    const kindLabel = kindClass.replace('log-kind-', '');
     const el = document.createElement('div');
-    el.className = 'log-line ' + inferLogToneClass(payload) + ' ' + inferLogDirectionClass(message || payload);
+    el.className = 'log-line ' + kindClass;
     el.dataset.tag = tag.toUpperCase();
+    el.dataset.kind = kindLabel;
 
     const timeEl = document.createElement('span');
     timeEl.className = 'log-time';
-    timeEl.textContent = time || '';
+    timeEl.textContent = ts > 0 ? formatElapsed(ts) : '';
 
     const tagEl = document.createElement('span');
     tagEl.className = 'log-tag ' + logTagClassForName(tag);
@@ -520,8 +603,31 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
 
     el.appendChild(timeEl);
     el.appendChild(tagEl);
+    if (kindClass !== 'log-kind-info') {
+      const kindEl = document.createElement('span');
+      kindEl.className = 'log-kind ' + kindClass;
+      kindEl.textContent = kindLabel;
+      el.appendChild(kindEl);
+    }
     el.appendChild(msgEl);
     return el;
+  };
+
+  const renderLogHistory = (entries) => {
+    if (!liveLogHost) return;
+    const wrap = liveLogHost.querySelector('.log-wrap');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const list = Array.isArray(entries) ? entries : [];
+    if (list.length === 0) {
+      wrap.innerHTML = "<div class='soft'>No log entries yet.</div>";
+      return;
+    }
+    list.forEach((entry) => {
+      wrap.insertBefore(createLogEntryElement(entry), wrap.firstChild);
+    });
+    trimLogEntries();
+    applyLogFilters();
   };
 
   const formatElapsed = (value) => {
@@ -549,20 +655,34 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
 
   const isAnyFilterEnabled = () => allLogTags.some((tag) => logFilters[tag] !== false);
   const isAllFilterEnabled = () => allLogTags.every((tag) => logFilters[tag] !== false);
+  const isAnyKindEnabled = () => allLogKinds.some((kind) => logKindFilters[kind] !== false);
+  const isAllKindEnabled = () => allLogKinds.every((kind) => logKindFilters[kind] !== false);
 
   const updateFilterButtons = () => {
     if (!liveLogHost) return;
-    const hideAllButton = liveLogHost.querySelector('#logHideAll');
-    if (hideAllButton) {
+    const kindsToggle = liveLogHost.querySelector('#logKindsToggle');
+    if (kindsToggle) {
+      const anyVisible = isAnyKindEnabled();
+      const allVisible = isAllKindEnabled();
+      kindsToggle.textContent = anyVisible ? 'Hide kinds' : 'Show kinds';
+      kindsToggle.className = 'log-filter log-filter-toggle' + (!allVisible ? ' active' : '');
+    }
+    const tagsToggle = liveLogHost.querySelector('#logTagsToggle');
+    if (tagsToggle) {
       const anyVisible = isAnyFilterEnabled();
       const allVisible = isAllFilterEnabled();
-      hideAllButton.textContent = anyVisible ? 'Hide all' : 'Show all';
-      hideAllButton.className = 'log-filter log-filter-toggle' + (!allVisible ? ' active' : '');
+      tagsToggle.textContent = anyVisible ? 'Hide tags' : 'Show tags';
+      tagsToggle.className = 'log-filter log-filter-toggle' + (!allVisible ? ' active' : '');
     }
     liveLogHost.querySelectorAll('[data-filter-tag]').forEach((btn) => {
       const tag = (btn.dataset.filterTag || 'GEN').toUpperCase();
       const enabled = logFilters[tag] !== false;
       btn.className = 'log-filter ' + logTagClassForName(tag).replace('log-tag-', 'log-filter-') + (enabled ? ' active' : '');
+    });
+    liveLogHost.querySelectorAll('[data-filter-kind]').forEach((btn) => {
+      const kind = (btn.dataset.filterKind || 'info').toLowerCase();
+      const enabled = logKindFilters[kind] !== false;
+      btn.className = 'log-filter ' + logKindClassForName(kind).replace('log-kind-', 'log-filter-') + (enabled ? ' active' : '');
     });
   };
 
@@ -570,7 +690,8 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
     if (!liveLogHost) return;
     liveLogHost.querySelectorAll('.log-line').forEach((line) => {
       const tag = (line.dataset.tag || 'GEN').toUpperCase();
-      line.style.display = logFilters[tag] !== false ? '' : 'none';
+      const kind = (line.dataset.kind || 'info').toLowerCase();
+      line.style.display = logFilters[tag] !== false && logKindFilters[kind] !== false ? '' : 'none';
     });
   };
 
@@ -643,7 +764,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
         const beforeScrollHeight = wrap.scrollHeight;
         const empty = wrap.querySelector('.soft');
         if (empty) empty.remove();
-        wrap.insertBefore(parseLogLine(event.data), wrap.firstChild);
+        wrap.insertBefore(createLogEntryElement(event.data), wrap.firstChild);
         trimLogEntries();
         syncLiveScroll(wrap, beforeScrollTop, beforeScrollHeight);
         applyLogFilters();
@@ -677,7 +798,16 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
         }
         return;
       }
-      if (target.id === 'logHideAll') {
+      if (target.id === 'logKindsToggle') {
+        const shouldShowAll = !isAnyKindEnabled();
+        allLogKinds.forEach((kind) => {
+          logKindFilters[kind] = shouldShowAll;
+        });
+        localStorage.setItem(logKindFiltersKey, JSON.stringify(logKindFilters));
+        setLogUi();
+        return;
+      }
+      if (target.id === 'logTagsToggle') {
         const shouldShowAll = !isAnyFilterEnabled();
         allLogTags.forEach((tag) => {
           logFilters[tag] = shouldShowAll;
@@ -699,10 +829,18 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
         return;
       }
       const tag = target.dataset.filterTag;
-      if (!tag) return;
-      const upper = tag.toUpperCase();
-      logFilters[upper] = logFilters[upper] === false;
-      localStorage.setItem(logFiltersKey, JSON.stringify(logFilters));
+      if (tag) {
+        const upper = tag.toUpperCase();
+        logFilters[upper] = logFilters[upper] === false;
+        localStorage.setItem(logFiltersKey, JSON.stringify(logFilters));
+        setLogUi();
+        return;
+      }
+      const kind = target.dataset.filterKind;
+      if (!kind) return;
+      const lower = kind.toLowerCase();
+      logKindFilters[lower] = logKindFilters[lower] === false;
+      localStorage.setItem(logKindFiltersKey, JSON.stringify(logKindFilters));
       setLogUi();
     });
   }
@@ -720,9 +858,9 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
       return;
     }
     fetch('/log', { cache: 'no-store' })
-      .then((response) => response.text())
-      .then((html) => {
-        liveLogHost.innerHTML = html;
+      .then((response) => response.json())
+      .then((entries) => {
+        renderLogHistory(entries);
         mountLog();
       })
       .catch(() => {

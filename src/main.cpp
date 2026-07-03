@@ -524,10 +524,14 @@ void pruneLogStreamClients()
   }
 }
 
+static String buildDebugLogEntryJson(const char *line, uint32_t tsMs);
+String buildDebugLogJson();
+
 void broadcastLogLineToStream(const char *line)
 {
   pruneLogStreamClients();
   const uint32_t ts = millis();
+  String payload = buildDebugLogEntryJson(line, ts);
   for (uint8_t i = 0; i < LOG_STREAM_CLIENT_CAPACITY; i++)
   {
     if (!logStreamClients[i].active)
@@ -535,9 +539,7 @@ void broadcastLogLineToStream(const char *line)
     WiFiClient &client = logStreamClients[i].client;
     client.print("event: log\n");
     client.print("data: ");
-    client.print(ts);
-    client.print('|');
-    client.print(line);
+    client.print(payload);
     client.print("\n\n");
     client.flush();
     if (!client.connected())
@@ -548,169 +550,81 @@ void broadcastLogLineToStream(const char *line)
   }
 }
 
-static String logTagClassForName(const String &tag);
-static String logToneClassForLine(const String &line);
-static String logDirectionClassForLine(const String &line);
-static String renderDebugLogLine(const char *line, uint32_t tsMs);
-
-static String formatRelativeUptime(uint32_t elapsedMs)
+static void appendJsonString(String &out, const char *value)
 {
-  uint32_t totalSeconds = elapsedMs / 1000UL;
-  uint32_t millisPart = elapsedMs % 1000UL;
-  uint32_t totalHours = totalSeconds / 3600UL;
-  totalSeconds %= 3600UL;
-  uint32_t minutes = totalSeconds / 60UL;
-  uint32_t seconds = totalSeconds % 60UL;
-
-  char buf[32];
-  snprintf(buf, sizeof(buf), "+%05uh %02um %02u.%03us", totalHours, minutes, seconds, millisPart);
-  return String(buf);
-}
-
-String buildDebugLogHtml()
-{
-  String html;
-  html.reserve(320 + (size_t)logState.count * 240);
-  html += "<div class='card' id='liveLogCard'><div class='log-head'>";
-  html += "<div><h2 style='margin:0'>Live log</h2></div>";
-  html += "<div class='log-controls'>";
-  html += "<span class='tag tag-muted' id='logLiveState'>live</span>";
-  html += "<button type='button' class='log-btn' id='logToggle'>Pause</button>";
-  html += "<button type='button' class='log-btn log-follow active' id='logFollowToggle'>Follow live</button>";
-  html += "<button type='button' class='log-filter log-filter-bms active' data-filter-tag='BMS'>BMS</button>";
-  html += "<button type='button' class='log-filter log-filter-can active' data-filter-tag='CAN'>CAN</button>";
-  html += "<button type='button' class='log-filter log-filter-stat active' data-filter-tag='STAT'>STAT</button>";
-  html += "<button type='button' class='log-filter log-filter-cfg active' data-filter-tag='CFG'>CFG</button>";
-  html += "<button type='button' class='log-filter log-filter-boot active' data-filter-tag='BOOT'>BOOT</button>";
-  html += "<button type='button' class='log-filter log-filter-wifi active' data-filter-tag='WIFI'>WIFI</button>";
-  html += "<button type='button' class='log-filter log-filter-http active' data-filter-tag='HTTP'>HTTP</button>";
-  html += "<button type='button' class='log-filter log-filter-ota active' data-filter-tag='OTA'>OTA</button>";
-  html += "<button type='button' class='log-filter log-filter-ap active' data-filter-tag='AP'>AP</button>";
-  html += "<button type='button' class='log-filter log-filter-dbg active' data-filter-tag='D'>DBG</button>";
-  html += "<button type='button' class='log-filter log-filter-gen active' data-filter-tag='GEN'>GEN</button>";
-  html += "<button type='button' class='log-filter log-filter-toggle active' id='logHideAll'>Hide all</button>";
-  html += "</div>";
-  html += "</div>";
-  html += "<div class='log-wrap'>";
-  if (logState.count == 0)
+  out += '"';
+  if (value != nullptr)
   {
-    html += "<div class='soft'>No log entries yet.</div>";
-  }
-  else
-  {
-    const uint16_t capacity = cfg.logBufferSize ? cfg.logBufferSize : 50;
-    for (uint16_t i = 0; i < logState.count; i++)
+    for (const unsigned char *p = (const unsigned char *)value; *p != '\0'; ++p)
     {
-      uint16_t index = (uint16_t)((logState.head + capacity - 1 - i) % capacity);
-      html += renderDebugLogLine(logState.lines[index], logState.times[index]);
-    }
-  }
-  html += "</div></div>";
-  return html;
-}
-
-static String logTagClassForName(const String &tag)
-{
-  if (tag == "BMS")
-    return "log-tag-bms";
-  if (tag == "CAN")
-    return "log-tag-can";
-  if (tag == "CFG")
-    return "log-tag-cfg";
-  if (tag == "BOOT")
-    return "log-tag-boot";
-  if (tag == "WIFI")
-    return "log-tag-wifi";
-  if (tag == "HTTP")
-    return "log-tag-http";
-  if (tag == "OTA")
-    return "log-tag-ota";
-  if (tag == "AP")
-    return "log-tag-ap";
-  if (tag == "STAT")
-    return "log-tag-stat";
-  if (tag == "D")
-    return "log-tag-debug";
-  return "log-tag-gen";
-}
-
-static String logToneClassForLine(const String &line)
-{
-  String lower = line;
-  lower.toLowerCase();
-  const auto hasPositiveCounter = [](const String &text, const char *key) -> bool {
-    int pos = text.indexOf(key);
-    if (pos < 0)
-      return false;
-    pos += (int)strlen(key);
-    while (pos < (int)text.length() && text[pos] == ' ')
-      pos++;
-    if (pos >= (int)text.length())
-      return false;
-    if (!isDigit((unsigned char)text[pos]))
-      return true;
-    return text[pos] != '0';
-  };
-  if (lower.indexOf("error") >= 0 || lower.indexOf("timeout") >= 0 || lower.indexOf("offline") >= 0 || lower.indexOf("bus-off") >= 0 || lower.indexOf("failed") >= 0 || hasPositiveCounter(lower, "err=") || hasPositiveCounter(lower, "fail="))
-    return "log-line-bad";
-  if (lower.indexOf("warn") >= 0 || lower.indexOf("disabled") >= 0 || lower.indexOf("fallback") >= 0)
-    return "log-line-warn";
-  return "log-line-soft";
-}
-
-static String logDirectionClassForLine(const String &line)
-{
-  String lower = line;
-  lower.toLowerCase();
-  lower.trim();
-  if (lower.startsWith("rx ") || lower.startsWith("rx:"))
-    return "log-line-rx";
-  if (lower.startsWith("tx ") || lower.startsWith("tx:"))
-    return "log-line-tx";
-  return "";
-}
-
-static String renderDebugLogLine(const char *line, uint32_t tsMs)
-{
-  String raw = String(line);
-  String tag = "GEN";
-  String message = raw;
-  if (raw.startsWith("["))
-  {
-    int end = raw.indexOf(']');
-    if (end > 1)
-    {
-      tag = raw.substring(1, end);
-      message = raw.substring(end + 1);
-      if (message.startsWith(" "))
+      switch (*p)
       {
-        message.remove(0, 1);
+      case '\\':
+        out += "\\\\";
+        break;
+      case '"':
+        out += "\\\"";
+        break;
+      case '\b':
+        out += "\\b";
+        break;
+      case '\f':
+        out += "\\f";
+        break;
+      case '\n':
+        out += "\\n";
+        break;
+      case '\r':
+        out += "\\r";
+        break;
+      case '\t':
+        out += "\\t";
+        break;
+      default:
+        if (*p < 0x20)
+        {
+          char buf[7];
+          snprintf(buf, sizeof(buf), "\\u%04X", *p);
+          out += buf;
+        }
+        else
+        {
+          out += (char)*p;
+        }
+        break;
       }
     }
   }
+  out += '"';
+}
 
-  String html;
-  html.reserve(raw.length() + 96);
-  html += "<div class='log-line ";
-  html += logToneClassForLine(raw);
-  String directionClass = logDirectionClassForLine(message);
-  if (!directionClass.isEmpty())
+static String buildDebugLogEntryJson(const char *line, uint32_t tsMs)
+{
+  String json;
+  json.reserve(32 + strlen(line ? line : "") + 8);
+  json += "{\"ts\":";
+  json += tsMs;
+  json += ",\"line\":";
+  appendJsonString(json, line);
+  json += "}";
+  return json;
+}
+
+String buildDebugLogJson()
+{
+  String json;
+  json.reserve(64 + (size_t)logState.count * 256);
+  json += "[";
+  const uint16_t capacity = cfg.logBufferSize ? cfg.logBufferSize : 50;
+  for (uint16_t i = 0; i < logState.count; i++)
   {
-    html += " ";
-    html += directionClass;
+    if (i > 0)
+      json += ",";
+    uint16_t index = (uint16_t)((logState.head + capacity - logState.count + i) % capacity);
+    json += buildDebugLogEntryJson(logState.lines[index], logState.times[index]);
   }
-  html += "' data-tag='";
-  html += htmlEscape(tag);
-  html += "'><span class='log-time'>";
-  html += htmlEscape(formatRelativeUptime(tsMs));
-  html += "</span><span class='log-tag ";
-  html += logTagClassForName(tag);
-  html += "'>";
-  html += htmlEscape(tag);
-  html += "</span><span class='log-msg'>";
-  html += htmlEscape(message);
-  html += "</span></div>";
-  return html;
+  json += "]";
+  return json;
 }
 
 void debugPrintf(const char *fmt, ...)
@@ -1880,7 +1794,7 @@ void handleDiag()
 
 void handleLog()
 {
-  server.send(200, "text/html", buildDebugLogHtml());
+  server.send(200, "application/json", buildDebugLogJson());
 }
 
 void handleLogStream()
