@@ -355,7 +355,6 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   .log-kind-tx{background:rgba(111,45,92,.48);border-color:rgba(179,90,154,.8)}
   .log-btn{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:6px 12px;border-radius:999px;font:inherit;font-size:12px;cursor:pointer}
   .log-btn:hover{border-color:var(--accent)}
-  .log-follow.active{background:#1d2d1d;border-color:#4f7b4f;color:#d7f0d7}
   .log-filter{appearance:none;border:1px solid var(--line);background:rgba(34,34,34,.86);color:var(--muted);padding:5px 10px;border-radius:999px;font:inherit;font-size:11px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
   .log-filter.active{color:var(--text);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.06)}
   .log-filter-bms.active{background:#183047;border-color:#316590;color:#cfe7ff}
@@ -409,7 +408,6 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
           <div class='log-control-row'>
             <span class='tag tag-muted' id='logLiveState'>live</span>
             <button type='button' class='log-btn' id='logToggle'>Pause</button>
-            <button type='button' class='log-btn log-follow active' id='logFollowToggle'>Follow live</button>
           </div>
           <div class='log-control-row'>
             <button type='button' class='log-filter log-filter-info active' data-filter-kind='info'>info</button>
@@ -467,7 +465,6 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
 
   const liveLogHost = document.getElementById('liveLogHost');
   const logStateKey = 'bms.logPaused';
-  const logFollowKey = 'bms.logFollow';
   const logFiltersKey = 'bms.logFilters';
   const logKindFiltersKey = 'bms.logKindFilters';
   const autoRefreshEnabled = new URL(window.location.href).searchParams.has('upd');
@@ -476,8 +473,6 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   const defaultFilterState = Object.fromEntries(allLogTags.map((tag) => [tag, true]));
   const defaultKindFilterState = Object.fromEntries(allLogKinds.map((kind) => [kind, true]));
   let logPaused = localStorage.getItem(logStateKey) === '1';
-  let logFollow = localStorage.getItem(logFollowKey);
-  logFollow = logFollow === null ? true : logFollow === '1';
   let logFilters = (() => {
     try {
       const parsed = JSON.parse(localStorage.getItem(logFiltersKey) || 'null');
@@ -540,11 +535,22 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
       if (!/\d/.test(lower[idx])) return true;
       return lower[idx] !== '0';
     };
+    const hasFailMarker = () => {
+      const pos = lower.indexOf('fail=');
+      if (pos < 0) return false;
+      let idx = pos + 5;
+      while (idx < lower.length && lower[idx] === ' ') idx++;
+      if (idx >= lower.length) return false;
+      if (lower[idx] === '0') return false;
+      const value = lower.slice(idx);
+      if (value.startsWith('none') || value.startsWith('off') || value.startsWith('ok')) return false;
+      return true;
+    };
     const trimmed = lower.trim();
     if (lower.includes('error') || lower.includes('failed') || lower.includes('timeout') || lower.includes('offline') || lower.includes('bus-off') || lower.includes('fault') || hasPositiveCounter('err=')) {
       return 'log-kind-error';
     }
-    if (lower.includes('fail') || lower.includes('failure') || hasPositiveCounter('fail=')) {
+    if (hasFailMarker() || lower.includes('failure') || lower.includes('failed') || (/\bfail\b/.test(lower) && !lower.includes('fail='))) {
       return 'log-kind-fail';
     }
     if (lower.includes('warn') || lower.includes('disabled') || lower.includes('fallback')) {
@@ -695,11 +701,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
     });
   };
 
-  const syncLiveScroll = (wrap, beforeScrollTop, beforeScrollHeight) => {
-    if (logFollow) {
-      wrap.scrollTop = 0;
-      return;
-    }
+  const preserveLiveScroll = (wrap, beforeScrollTop, beforeScrollHeight) => {
     const delta = wrap.scrollHeight - beforeScrollHeight;
     const nearTop = beforeScrollTop <= 24;
     wrap.scrollTop = nearTop ? 0 : Math.max(0, beforeScrollTop + delta);
@@ -707,18 +709,12 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
 
   const setLogUi = () => {
     const button = document.getElementById('logToggle');
-    const followButton = document.getElementById('logFollowToggle');
     const state = document.getElementById('logLiveState');
     const logWrap = liveLogHost ? liveLogHost.querySelector('.log-wrap') : null;
     const controls = liveLogHost ? liveLogHost.querySelector('.log-controls') : null;
     if (button) {
       button.textContent = logPaused ? 'Resume' : 'Pause';
       button.style.display = autoRefreshEnabled ? 'none' : '';
-    }
-    if (followButton) {
-      followButton.textContent = logFollow ? 'Follow live' : 'Browse';
-      followButton.className = 'log-btn log-follow' + (logFollow ? ' active' : '');
-      followButton.style.display = autoRefreshEnabled ? 'none' : '';
     }
     if (state) {
       state.style.display = autoRefreshEnabled ? 'none' : '';
@@ -766,7 +762,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
         if (empty) empty.remove();
         wrap.insertBefore(createLogEntryElement(event.data), wrap.firstChild);
         trimLogEntries();
-        syncLiveScroll(wrap, beforeScrollTop, beforeScrollHeight);
+        preserveLiveScroll(wrap, beforeScrollTop, beforeScrollHeight);
         applyLogFilters();
       });
       logSource.onerror = () => {
@@ -814,18 +810,6 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
         });
         localStorage.setItem(logFiltersKey, JSON.stringify(logFilters));
         setLogUi();
-        return;
-      }
-      if (target.id === 'logFollowToggle') {
-        logFollow = !logFollow;
-        localStorage.setItem(logFollowKey, logFollow ? '1' : '0');
-        setLogUi();
-        if (logFollow && !logPaused) {
-          const wrap = liveLogHost.querySelector('.log-wrap');
-          if (wrap) {
-            wrap.scrollTop = 0;
-          }
-        }
         return;
       }
       const tag = target.dataset.filterTag;
