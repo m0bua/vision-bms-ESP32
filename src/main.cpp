@@ -130,10 +130,13 @@ extern const char UI_SHARED_CSS[] PROGMEM;
 extern const char UI_SHARED_JS[] PROGMEM;
 extern const char INDEX_HTML[] PROGMEM;
 extern const char DIAG_HTML[] PROGMEM;
+extern const char LOG_HTML[] PROGMEM;
 extern const char SETUP_HTML[] PROGMEM;
 
 void handleSetup();
 void handleDashboard();
+void handleLogs();
+String buildTopNavHtml(const char *activePage);
 void handleFirmwareUpdate();
 void handleFirmwareUpdateUpload();
 
@@ -1780,51 +1783,6 @@ void sendDeyeCanTelemetry()
   sendCanFrame(0x35F, 8, d35F);
 }
 
-String buildDiagHtml(uint16_t refreshSeconds)
-{
-  String html = FPSTR(DIAG_HTML);
-  html.replace("__UI_THEME_BASE_VARS__", String(FPSTR(UI_THEME_BASE_VARS)));
-  html.replace("__UI_SHARED_CSS__", String(FPSTR(UI_SHARED_CSS)));
-  html.replace("__CUSTOM_CSS__", String(cfg.customCss));
-  html.replace("__REFRESH_META__", refreshSeconds > 0 ? String("<meta http-equiv='refresh' content='") + String(refreshSeconds) + "'>" : "");
-  html.replace("__REFRESH_SECONDS__", String(refreshSeconds));
-  html.replace("__REFRESH_STATE__", refreshSeconds > 0 ? String("on (") + String(refreshSeconds) + " s)" : "off");
-  html.replace("__REFRESH_ACTION__", refreshSeconds > 0 ? "disable" : "enable");
-  html.replace("__CPU_TEMP__", String(temperatureRead(), 1) + " &deg;C");
-  html.replace("__ACTIVE_ID__", String(bms.activeSlaveId));
-  html.replace("__LAST_TRIED__", String(bms.lastTriedSlaveId));
-  html.replace("__ONLINE__", String(bms.online ? "ONLINE" : "OFFLINE"));
-  html.replace("__ERRORS__", String(bms.errorCount));
-  html.replace("__OPERATING__", operatingStateText());
-  html.replace("__HEALTH_CLASS__", healthClass());
-  html.replace("__HEALTH_TEXT__", healthText());
-  html.replace("__STATUS_HEX__", formatHex16(bms.status));
-  html.replace("__STATUS_TEXT__", statusFlagsText());
-  html.replace("__WARNING_HEX__", formatHex16(bms.warning));
-  html.replace("__WARNING_TEXT__", warningFlagsText());
-  html.replace("__PROTECT_HEX__", formatHex16(bms.protect));
-  html.replace("__PROTECT_TEXT__", protectFlagsText());
-  html.replace("__CYCLES__", String(bms.cycles));
-  html.replace("__CELL_COUNT__", String(bms.cellCount ? bms.cellCount : 15));
-  html.replace("__CRC_RX__", formatHex16(bms.crcReceived));
-  html.replace("__CRC_CALC__", formatHex16(bms.crcCalculated));
-  html.replace("__DEBUG_POLL_COUNT__", String(dbg.pollCount));
-  html.replace("__DEBUG_SUCCESS_COUNT__", String(dbg.successCount));
-  html.replace("__DEBUG_FAIL_COUNT__", String(dbg.failCount));
-  html.replace("__DEBUG_LAST_FAIL__", failReasonText(dbg.lastFailReason));
-  html.replace("__DEBUG_LAST_POLL_MS__", String(dbg.lastPollDurationMs));
-  html.replace("__DEBUG_LAST_FRAME_LEN__", String(dbg.lastFrameLen));
-  html.replace("__DEBUG_TEMP_SENSORS__", formatIntArray(bms.tempSensors, bms.tempSensorCount));
-  html.replace("__DEBUG_TEMP_SENSOR_COUNT__", String(bms.tempSensorCount));
-  html.replace("__LOG_DOM_LIMIT__", String(cfg.logDomLimit));
-  String diagBlocks;
-  diagBlocks.reserve(1024);
-  diagBlocks += buildDiagRawRegistersHtml();
-  diagBlocks += buildDiagCanHtml();
-  html.replace("__DIAG_BLOCKS__", diagBlocks);
-  return html;
-}
-
 String buildSetupHtml()
 {
   String html = FPSTR(SETUP_HTML);
@@ -1834,14 +1792,7 @@ String buildSetupHtml()
   html.replace("__STATUS__", portalActive
                                    ? String("Access point is active on ") + AP_SSID + " (" + AP_IP.toString() + ")"
                                    : String("Wi-Fi state: ") + (WiFi.status() == WL_CONNECTED ? String("connected as ") + WiFi.SSID() : String("not connected")));
-  if (WiFi.status() == WL_CONNECTED && cfg.wifiSsid[0] != '\0')
-  {
-    html.replace("__TOP_ACTION__", String("<div><a href='/'>Back to dashboard</a></div>"));
-  }
-  else
-  {
-    html.replace("__TOP_ACTION__", String("<div class='pill live'>") + (portalActive ? "AP mode" : "setup") + "</div>");
-  }
+  html.replace("__TOP_ACTION__", buildTopNavHtml("setup"));
   html.replace("__WIFI_SSID__", htmlEscape(String(cfg.wifiSsid)));
   html.replace("__WIFI_HIDDEN_CHECKED__", cfg.wifiHidden ? "checked" : "");
   html.replace("__ENABLE_CAN_CHECKED__", cfg.enableDeyeCan ? "checked" : "");
@@ -1868,7 +1819,7 @@ void handleDashboard()
   html.replace("__UI_SHARED_CSS__", String(FPSTR(UI_SHARED_CSS)));
   html.replace("__CUSTOM_CSS__", String(cfg.customCss));
   html.replace("__UI_SHARED_JS__", String(FPSTR(UI_SHARED_JS)));
-  html.replace("__TOP_ACTION__", String("<div><a href='/setup'>Settings</a> <a href='/diag'>Diagnostic</a> <a href='/json'>JSON</a></div>"));
+  html.replace("__TOP_ACTION__", buildTopNavHtml("dashboard"));
   server.send(200, "text/html", html);
 }
 
@@ -2062,6 +2013,34 @@ void stopPortal()
   debugPrintf("[AP] stopped");
 }
 
+String buildTopNavHtml(const char *activePage)
+{
+  String html = "<div class='top-nav'>";
+  const auto addItem = [&](const char *label, const char *href, const char *page) {
+    if (activePage && strcmp(activePage, page) == 0)
+    {
+      html += "<span class='active'>";
+      html += label;
+      html += "</span>";
+    }
+    else
+    {
+      html += "<a href='";
+      html += href;
+      html += "'>";
+      html += label;
+      html += "</a>";
+    }
+  };
+  addItem("Dashboard", "/", "dashboard");
+  addItem("Settings", "/setup", "setup");
+  addItem("Logs", "/logs", "logs");
+  addItem("Diagnostic", "/diag", "diag");
+  addItem("JSON", "/json", "json");
+  html += "</div>";
+  return html;
+}
+
 void handleDiag()
 {
   uint16_t refreshSeconds = 0;
@@ -2071,12 +2050,120 @@ void handleDiag()
     if (requested > 0)
       refreshSeconds = (uint16_t)requested;
   }
-  server.send(200, "text/html", buildDiagHtml(refreshSeconds));
+
+  String html = FPSTR(DIAG_HTML);
+  html.reserve(20000);
+  html.replace("__UI_THEME_BASE_VARS__", String(FPSTR(UI_THEME_BASE_VARS)));
+  html.replace("__UI_SHARED_CSS__", String(FPSTR(UI_SHARED_CSS)));
+  html.replace("__CUSTOM_CSS__", String(cfg.customCss));
+  html.replace("__TOP_ACTION__", buildTopNavHtml("diag"));
+  html.replace("__REFRESH_META__", refreshSeconds > 0 ? String("<meta http-equiv='refresh' content='") + String(refreshSeconds) + "'>" : "");
+  html.replace("__REFRESH_SECONDS__", String(refreshSeconds));
+  html.replace("__REFRESH_STATE__", refreshSeconds > 0 ? String("on (") + String(refreshSeconds) + " s)" : "off");
+  html.replace("__REFRESH_ACTION__", refreshSeconds > 0 ? "disable" : "enable");
+  html.replace("__CPU_TEMP__", String(temperatureRead(), 1) + " &deg;C");
+  html.replace("__ACTIVE_ID__", String(bms.activeSlaveId));
+  html.replace("__LAST_TRIED__", String(bms.lastTriedSlaveId));
+  html.replace("__ONLINE__", String(bms.online ? "ONLINE" : "OFFLINE"));
+  html.replace("__ERRORS__", String(bms.errorCount));
+  html.replace("__OPERATING__", operatingStateText());
+  html.replace("__HEALTH_CLASS__", healthClass());
+  html.replace("__HEALTH_TEXT__", healthText());
+  html.replace("__STATUS_HEX__", formatHex16(bms.status));
+  html.replace("__STATUS_TEXT__", statusFlagsText());
+  html.replace("__WARNING_HEX__", formatHex16(bms.warning));
+  html.replace("__WARNING_TEXT__", warningFlagsText());
+  html.replace("__PROTECT_HEX__", formatHex16(bms.protect));
+  html.replace("__PROTECT_TEXT__", protectFlagsText());
+  html.replace("__CYCLES__", String(bms.cycles));
+  html.replace("__CELL_COUNT__", String(bms.cellCount ? bms.cellCount : 15));
+  html.replace("__CRC_RX__", formatHex16(bms.crcReceived));
+  html.replace("__CRC_CALC__", formatHex16(bms.crcCalculated));
+  html.replace("__DEBUG_POLL_COUNT__", String(dbg.pollCount));
+  html.replace("__DEBUG_SUCCESS_COUNT__", String(dbg.successCount));
+  html.replace("__DEBUG_FAIL_COUNT__", String(dbg.failCount));
+  html.replace("__DEBUG_LAST_FAIL__", failReasonText(dbg.lastFailReason));
+  html.replace("__DEBUG_LAST_POLL_MS__", String(dbg.lastPollDurationMs));
+  html.replace("__DEBUG_LAST_FRAME_LEN__", String(dbg.lastFrameLen));
+  html.replace("__DEBUG_TEMP_SENSORS__", formatIntArray(bms.tempSensors, bms.tempSensorCount));
+  html.replace("__DEBUG_TEMP_SENSOR_COUNT__", String(bms.tempSensorCount));
+  html.replace("__LOG_DOM_LIMIT__", String(cfg.logDomLimit));
+
+  const char *marker = "__DIAG_BLOCKS__";
+  int markerPos = html.indexOf(marker);
+  if (markerPos < 0)
+  {
+    server.send(500, "text/plain", "Diagnostics template error");
+    return;
+  }
+
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server.send(200, "text/html", "");
+  server.sendContent(html.substring(0, markerPos));
+  server.sendContent(buildDiagRawRegistersHtml());
+  server.sendContent(buildDiagCanHtml());
+  server.sendContent(html.substring(markerPos + (int)strlen(marker)));
+}
+
+void handleLogs()
+{
+  String html = FPSTR(LOG_HTML);
+  html.reserve(24000);
+  html.replace("__UI_THEME_BASE_VARS__", String(FPSTR(UI_THEME_BASE_VARS)));
+  html.replace("__UI_SHARED_CSS__", String(FPSTR(UI_SHARED_CSS)));
+  html.replace("__CUSTOM_CSS__", String(cfg.customCss));
+  html.replace("__TOP_ACTION__", buildTopNavHtml("logs"));
+  html.replace("__LOG_DOM_LIMIT__", String(cfg.logDomLimit));
+  server.send(200, "text/html", html);
 }
 
 void handleLog()
 {
-  server.send(200, "application/json", buildDebugLogJson());
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server.send(200, "application/json", "");
+  server.sendContent("[");
+
+  uint16_t capacity[DebugLogState::TAG_BUCKET_COUNT];
+  uint16_t remaining[DebugLogState::TAG_BUCKET_COUNT];
+  uint16_t cursor[DebugLogState::TAG_BUCKET_COUNT];
+  for (uint8_t bucket = 0; bucket < DebugLogState::TAG_BUCKET_COUNT; bucket++)
+  {
+    capacity[bucket] = logBucketCapacity(bucket);
+    remaining[bucket] = (logState.count[bucket] < capacity[bucket]) ? logState.count[bucket] : capacity[bucket];
+    cursor[bucket] = (uint16_t)((logState.head[bucket] + DEBUG_LOG_STORAGE_CAPACITY - remaining[bucket]) % DEBUG_LOG_STORAGE_CAPACITY);
+  }
+
+  bool first = true;
+  while (true)
+  {
+    int bestBucket = -1;
+    uint32_t bestTs = 0;
+    for (uint8_t bucket = 0; bucket < DebugLogState::TAG_BUCKET_COUNT; bucket++)
+    {
+      if (remaining[bucket] == 0)
+        continue;
+      const uint32_t ts = logState.times[bucket][cursor[bucket]];
+      if (bestBucket < 0 || ts < bestTs)
+      {
+        bestBucket = bucket;
+        bestTs = ts;
+      }
+    }
+    if (bestBucket < 0)
+    {
+      break;
+    }
+    if (!first)
+      server.sendContent(",");
+    first = false;
+
+    String payload = buildDebugLogEntryJson(logState.lines[bestBucket][cursor[bestBucket]], logState.times[bestBucket][cursor[bestBucket]]);
+    server.sendContent(payload);
+    cursor[bestBucket] = (uint16_t)((cursor[bestBucket] + 1) % DEBUG_LOG_STORAGE_CAPACITY);
+    remaining[bestBucket]--;
+  }
+
+  server.sendContent("]");
 }
 
 void handleLogStream()
@@ -2334,6 +2421,7 @@ void setup()
   server.on("/reset", HTTP_POST, handleReset);
   server.on("/update", HTTP_POST, handleFirmwareUpdate, handleFirmwareUpdateUpload);
   server.on("/diag", handleDiag);
+  server.on("/logs", handleLogs);
   server.on("/log", handleLog);
   server.on("/log-stream", handleLogStream);
   server.on("/json", handleJson);

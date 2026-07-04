@@ -26,6 +26,11 @@ extern const char UI_SHARED_CSS[] PROGMEM = R"rawliteral(
   .muted{color:var(--muted)}
   .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
   a{color:var(--accent);text-decoration:none}
+  .top-nav{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .top-nav a{display:inline-flex;align-items:center;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font-size:13px;line-height:1.2;white-space:nowrap}
+  .top-nav a:hover{border-color:var(--accent)}
+  .top-nav .active{display:inline-flex;align-items:center;padding:6px 12px;border-radius:999px;border:1px solid var(--accent);background:rgba(128,203,196,.12);color:var(--accent);font-size:13px;line-height:1.2;white-space:nowrap;pointer-events:none;cursor:default}
+  @media (max-width:560px){.top-nav{justify-content:flex-start}.top-nav a,.top-nav .active{padding:6px 10px;font-size:12px}}
 )rawliteral";
 
 extern const char UI_SHARED_JS[] PROGMEM = R"rawliteral(
@@ -86,7 +91,7 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
     body{__UI_THEME_BASE_VARS__}
     __CUSTOM_CSS__
     .wrap{max-width:1280px;margin:0 auto;padding:20px}
-    .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px}
+    .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.08)}
     .hero-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:flex-end}
     h1{margin:0;font-size:28px}
     .sub{color:var(--muted);margin-top:6px}
@@ -297,7 +302,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   __CUSTOM_CSS__
   #clickable{cursor:pointer;margin-bottom:.5em}
   .wrap{max-width:1100px;margin:0 auto}
-  .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px}
+  .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.08)}
   h1{margin:0;font-size:30px}
   .card{margin:0 0 16px 0;padding:16px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
@@ -346,6 +351,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   .log-control-row{display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;min-width:0}
   #logLiveState{min-width:11ch;text-align:center;justify-content:center;display:inline-flex}
   .log-line{display:flex;gap:10px;align-items:flex-start;padding:5px .3em;border-bottom:1px solid rgba(255,255,255,0.05);word-break:break-word}
+  .log-line[hidden]{display:none !important}
   .log-line:last-child{border-bottom:0}
   .log-time{flex:0 0 auto;min-width:18ch;color:var(--muted);font-size:11px;letter-spacing:.02em}
   .log-tag{flex:0 0 auto;min-width:58px;text-align:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.04em;border:1px solid transparent}
@@ -393,12 +399,12 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   .log-filter:hover{border-color:var(--accent)}
   @media (max-width:560px){.hero{flex-direction:column;align-items:flex-start}}
 </style></head><body data-refresh-seconds='__REFRESH_SECONDS__'>
-<div class='wrap'>
+  <div class='wrap'>
   <div class='hero'>
     <div>
       <h1>Diagnostics</h1>
     </div>
-    <div><a href='/'>Back to dashboard</a></div>
+    __TOP_ACTION__
   </div>
   <div class='card'>
     <div id='clickable' class='soft'>Auto refresh: __REFRESH_STATE__ | click to __REFRESH_ACTION__</div>
@@ -415,44 +421,9 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
     <div>Temp sensors: __DEBUG_TEMP_SENSOR_COUNT__ | Raw: <span class='muted'>__DEBUG_TEMP_SENSORS__</span></div>
     <div>CRC rx: __CRC_RX__ | CRC calc: __CRC_CALC__</div>
   </div>
-  <div id='liveLogHost'>
-    <div class='card' id='liveLogCard'>
-      <div class='log-head'>
-        <div><h2 style='margin:0'>Live log</h2></div>
-        <div class='log-controls'>
-          <div class='log-control-row'>
-            <span class='tag tag-muted' id='logLiveState'>live</span>
-            <button type='button' class='log-btn' id='logToggle'>Pause</button>
-          </div>
-          <div class='log-control-row'>
-            <button type='button' class='log-filter log-filter-info active' data-filter-kind='info'>info</button>
-            <button type='button' class='log-filter log-filter-warning active' data-filter-kind='warning'>warning</button>
-            <button type='button' class='log-filter log-filter-fail active' data-filter-kind='fail'>fail</button>
-            <button type='button' class='log-filter log-filter-error active' data-filter-kind='error'>error</button>
-            <button type='button' class='log-filter log-filter-rx active' data-filter-kind='rx'>rx</button>
-            <button type='button' class='log-filter log-filter-tx active' data-filter-kind='tx'>tx</button>
-            <button type='button' class='log-filter log-filter-toggle active' id='logKindsToggle'>Hide kinds</button>
-          </div>
-          <div class='log-control-row'>
-            <button type='button' class='log-filter log-filter-bms active' data-filter-tag='BMS'>BMS</button>
-            <button type='button' class='log-filter log-filter-can active' data-filter-tag='CAN'>CAN</button>
-            <button type='button' class='log-filter log-filter-stat active' data-filter-tag='STAT'>STAT</button>
-            <button type='button' class='log-filter log-filter-cfg active' data-filter-tag='CFG'>CFG</button>
-            <button type='button' class='log-filter log-filter-boot active' data-filter-tag='BOOT'>BOOT</button>
-            <button type='button' class='log-filter log-filter-wifi active' data-filter-tag='WIFI'>WIFI</button>
-            <button type='button' class='log-filter log-filter-http active' data-filter-tag='HTTP'>HTTP</button>
-            <button type='button' class='log-filter log-filter-ota active' data-filter-tag='OTA'>OTA</button>
-            <button type='button' class='log-filter log-filter-ap active' data-filter-tag='AP'>AP</button>
-            <button type='button' class='log-filter log-filter-dbg active' data-filter-tag='D'>DBG</button>
-            <button type='button' class='log-filter log-filter-gen active' data-filter-tag='GEN'>GEN</button>
-            <button type='button' class='log-filter log-filter-toggle active' id='logTagsToggle'>Hide tags</button>
-          </div>
-        </div>
-      </div>
-      <div class='log-wrap'>
-        <div class='soft'>Loading live log...</div>
-      </div>
-    </div>
+  <div class='card'>
+    <h2 style='margin:0'>Live log moved</h2>
+    <div class='soft'>The live log is now on <a href='/logs'>/logs</a>.</div>
   </div>
   <div class='card' style='margin-top:16px'>
     <h2 style="margin:0">Debug</h2>
@@ -477,420 +448,490 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
     if (event.target.closest('a, button, input, textarea, select, label')) return;
     toggleRefresh();
   });
-
-  const liveLogHost = document.getElementById('liveLogHost');
-  const logStateKey = 'bms.logPaused';
-  const logFiltersKey = 'bms.logFilters';
-  const logKindFiltersKey = 'bms.logKindFilters';
-  const autoRefreshEnabled = new URL(window.location.href).searchParams.has('upd');
-  const allLogTags = ['BMS', 'CAN', 'STAT', 'CFG', 'BOOT', 'WIFI', 'HTTP', 'OTA', 'AP', 'D', 'GEN'];
-  const allLogKinds = ['info', 'warning', 'fail', 'error', 'rx', 'tx'];
-  const defaultFilterState = Object.fromEntries(allLogTags.map((tag) => [tag, true]));
-  const defaultKindFilterState = Object.fromEntries(allLogKinds.map((kind) => [kind, true]));
-  let logPaused = localStorage.getItem(logStateKey) === '1';
-  let logFilters = (() => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(logFiltersKey) || 'null');
-      if (parsed && typeof parsed === 'object') {
-        return { ...defaultFilterState, ...parsed };
-      }
-    } catch (e) {}
-    return { ...defaultFilterState };
-  })();
-  let logKindFilters = (() => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(logKindFiltersKey) || 'null');
-      if (parsed && typeof parsed === 'object') {
-        const merged = { ...defaultKindFilterState, ...parsed };
-        if (Object.prototype.hasOwnProperty.call(parsed, 'msg') && !Object.prototype.hasOwnProperty.call(parsed, 'info')) {
-          merged.info = parsed.msg;
-        }
-        delete merged.msg;
-        return merged;
-      }
-    } catch (e) {}
-    return { ...defaultKindFilterState };
-  })();
-  let logSource = null;
-  let logHistory = [];
-
-  const logTagClassForName = (tag) => {
-    const upper = String(tag || 'GEN').toUpperCase();
-    if (upper === 'BMS') return 'log-tag-bms';
-    if (upper === 'CAN') return 'log-tag-can';
-    if (upper === 'CFG') return 'log-tag-cfg';
-    if (upper === 'BOOT') return 'log-tag-boot';
-    if (upper === 'WIFI') return 'log-tag-wifi';
-    if (upper === 'HTTP') return 'log-tag-http';
-    if (upper === 'OTA') return 'log-tag-ota';
-    if (upper === 'AP') return 'log-tag-ap';
-    if (upper === 'STAT') return 'log-tag-stat';
-    if (upper === 'D') return 'log-tag-debug';
-    return 'log-tag-gen';
-  };
-
-  const logKindClassForName = (kind) => {
-    const lower = String(kind || 'info').toLowerCase();
-    if (lower === 'warning') return 'log-kind-warning';
-    if (lower === 'fail') return 'log-kind-fail';
-    if (lower === 'error') return 'log-kind-error';
-    if (lower === 'info') return 'log-kind-info';
-    if (lower === 'rx') return 'log-kind-rx';
-    if (lower === 'tx') return 'log-kind-tx';
-    return 'log-kind-info';
-  };
-
-  const inferLogKindClass = (line) => {
-    const lower = String(line || '').toLowerCase();
-    const hasPositiveCounter = (key) => {
-      const pos = lower.indexOf(key);
-      if (pos < 0) return false;
-      let idx = pos + key.length;
-      while (idx < lower.length && lower[idx] === ' ') idx++;
-      if (idx >= lower.length) return false;
-      if (!/\d/.test(lower[idx])) return true;
-      return lower[idx] !== '0';
-    };
-    const hasFailMarker = () => {
-      const pos = lower.indexOf('fail=');
-      if (pos < 0) return false;
-      let idx = pos + 5;
-      while (idx < lower.length && lower[idx] === ' ') idx++;
-      if (idx >= lower.length) return false;
-      if (lower[idx] === '0') return false;
-      const value = lower.slice(idx);
-      if (value.startsWith('none') || value.startsWith('off') || value.startsWith('ok')) return false;
-      return true;
-    };
-    const hasStandaloneFail = () => /(^|[^a-z0-9_])fail(?:\s|:|$)/.test(lower);
-    const trimmed = lower.trim();
-    if (lower.includes('error') || lower.includes('failed') || lower.includes('timeout') || lower.includes('offline') || lower.includes('bus-off') || lower.includes('fault') || hasPositiveCounter('err=')) {
-      return 'log-kind-error';
-    }
-    if (hasFailMarker() || lower.includes('failure') || lower.includes('failed') || hasStandaloneFail()) {
-      return 'log-kind-fail';
-    }
-    if (lower.includes('warn') || lower.includes('disabled') || lower.includes('fallback')) {
-      return 'log-kind-warning';
-    }
-    if (trimmed.startsWith('rx ') || trimmed.startsWith('rx:') || trimmed.startsWith('rx=') || lower.includes(' rx=')) return 'log-kind-rx';
-    if (trimmed.startsWith('tx ') || trimmed.startsWith('tx:') || trimmed.startsWith('tx=') || lower.includes(' tx=')) return 'log-kind-tx';
-    return 'log-kind-info';
-  };
-
-  const normalizeLogEntry = (entry) => {
-    if (typeof entry === 'string') {
-      try {
-        return normalizeLogEntry(JSON.parse(entry));
-      } catch (e) {
-        return { ts: 0, line: entry };
-      }
-    }
-    if (!entry || typeof entry !== 'object') {
-      return { ts: 0, line: '' };
-    }
-    const ts = Number(entry.ts ?? entry.time_ms ?? entry.time ?? 0);
-    const line = String(entry.line ?? entry.raw ?? '');
-    return { ts: Number.isFinite(ts) ? ts : 0, line };
-  };
-
-  const parseLogEntry = (entry) => {
-    const { ts, line } = normalizeLogEntry(entry);
-    let tag = 'GEN';
-    let message = line;
-    if (line.startsWith('[')) {
-      const end = line.indexOf(']');
-      if (end > 1) {
-        tag = line.slice(1, end);
-        message = line.slice(end + 1).trimStart();
-      }
-    }
-    const tagUpper = tag.toUpperCase();
-    const kindClass = inferLogKindClass(message || line);
-    const kind = kindClass.replace('log-kind-', '');
-    return { ts, line, tag, tagUpper, message, kindClass, kind };
-  };
-
-  const matchesLogFilters = (entry) => {
-    return logFilters[entry.tagUpper] !== false && logKindFilters[entry.kind] !== false;
-  };
-
-  const createLogEntryElement = (entry) => {
-    const el = document.createElement('div');
-    el.className = 'log-line ' + entry.kindClass;
-    el.dataset.tag = entry.tagUpper;
-    el.dataset.kind = entry.kind;
-
-    const timeEl = document.createElement('span');
-    timeEl.className = 'log-time';
-    timeEl.textContent = entry.ts > 0 ? formatElapsed(entry.ts) : '';
-
-    const tagEl = document.createElement('span');
-    tagEl.className = 'log-tag ' + logTagClassForName(entry.tag);
-    tagEl.textContent = entry.tag;
-
-    const msgEl = document.createElement('span');
-    msgEl.className = 'log-msg';
-    msgEl.textContent = entry.message;
-
-    el.appendChild(timeEl);
-    el.appendChild(tagEl);
-    if (entry.kindClass !== 'log-kind-info') {
-      const kindEl = document.createElement('span');
-      kindEl.className = 'log-kind ' + entry.kindClass;
-      kindEl.textContent = entry.kind;
-      el.appendChild(kindEl);
-    }
-    el.appendChild(msgEl);
-    return el;
-  };
-
-  const renderLogHistory = (entries = null, preserveScroll = false) => {
-    if (!liveLogHost) return;
-    const wrap = liveLogHost.querySelector('.log-wrap');
-    if (!wrap) return;
-    let beforeScrollTop = 0;
-    let beforeScrollHeight = 0;
-    if (preserveScroll) {
-      beforeScrollTop = wrap.scrollTop;
-      beforeScrollHeight = wrap.scrollHeight;
-    }
-    if (entries !== null) {
-      logHistory = Array.isArray(entries) ? entries.map(parseLogEntry) : [];
-    }
-    wrap.innerHTML = '';
-    const visibleEntries = logHistory.filter(matchesLogFilters);
-    if (logHistory.length === 0) {
-      wrap.innerHTML = "<div class='soft'>No log entries yet.</div>";
-      return;
-    }
-    if (visibleEntries.length === 0) {
-      wrap.innerHTML = "<div class='soft'>No log entries match current filters.</div>";
-      return;
-    }
-    visibleEntries.forEach((entry) => {
-      wrap.insertBefore(createLogEntryElement(entry), wrap.firstChild);
-    });
-    trimLogEntries();
-    if (preserveScroll) {
-      preserveLiveScroll(wrap, beforeScrollTop, beforeScrollHeight);
-    }
-  };
-
-  const formatElapsed = (value) => {
-    const totalMs = Math.max(0, Math.floor(Number(value || 0)));
-    const totalSeconds = Math.floor(totalMs / 1000);
-    const millis = totalMs % 1000;
-    const hours = Math.floor(totalSeconds / 3600);
-    const rem = totalSeconds % 3600;
-    const minutes = Math.floor(rem / 60);
-    const seconds = rem % 60;
-    return `+${String(hours).padStart(5, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}s`;
-  };
-
-  const logDomLimit = Number(__LOG_DOM_LIMIT__ || 1000);
-  const trimLogEntries = () => {
-    if (!liveLogHost) return;
-    const wrap = liveLogHost.querySelector('.log-wrap');
-    if (!wrap) return;
-    while (wrap.querySelectorAll('.log-line').length > logDomLimit) {
-      const lastLine = wrap.querySelector('.log-line:last-of-type');
-      if (!lastLine) break;
-      lastLine.remove();
-    }
-  };
-
-  const isAnyFilterEnabled = () => allLogTags.some((tag) => logFilters[tag] !== false);
-  const isAllFilterEnabled = () => allLogTags.every((tag) => logFilters[tag] !== false);
-  const isAnyKindEnabled = () => allLogKinds.some((kind) => logKindFilters[kind] !== false);
-  const isAllKindEnabled = () => allLogKinds.every((kind) => logKindFilters[kind] !== false);
-
-  const updateFilterButtons = () => {
-    if (!liveLogHost) return;
-    const kindsToggle = liveLogHost.querySelector('#logKindsToggle');
-    if (kindsToggle) {
-      const anyVisible = isAnyKindEnabled();
-      const allVisible = isAllKindEnabled();
-      kindsToggle.textContent = anyVisible ? 'Hide kinds' : 'Show kinds';
-      kindsToggle.className = 'log-filter log-filter-toggle' + (!allVisible ? ' active' : '');
-    }
-    const tagsToggle = liveLogHost.querySelector('#logTagsToggle');
-    if (tagsToggle) {
-      const anyVisible = isAnyFilterEnabled();
-      const allVisible = isAllFilterEnabled();
-      tagsToggle.textContent = anyVisible ? 'Hide tags' : 'Show tags';
-      tagsToggle.className = 'log-filter log-filter-toggle' + (!allVisible ? ' active' : '');
-    }
-    liveLogHost.querySelectorAll('[data-filter-tag]').forEach((btn) => {
-      const tag = (btn.dataset.filterTag || 'GEN').toUpperCase();
-      const enabled = logFilters[tag] !== false;
-      btn.className = 'log-filter ' + logTagClassForName(tag).replace('log-tag-', 'log-filter-') + (enabled ? ' active' : '');
-    });
-    liveLogHost.querySelectorAll('[data-filter-kind]').forEach((btn) => {
-      const kind = (btn.dataset.filterKind || 'info').toLowerCase();
-      const enabled = logKindFilters[kind] !== false;
-      btn.className = 'log-filter ' + logKindClassForName(kind).replace('log-kind-', 'log-filter-') + (enabled ? ' active' : '');
-    });
-  };
-
-  const preserveLiveScroll = (wrap, beforeScrollTop, beforeScrollHeight) => {
-    const delta = wrap.scrollHeight - beforeScrollHeight;
-    const nearTop = beforeScrollTop <= 24;
-    wrap.scrollTop = nearTop ? 0 : Math.max(0, beforeScrollTop + delta);
-  };
-
-  const setLogUi = () => {
-    const button = document.getElementById('logToggle');
-    const state = document.getElementById('logLiveState');
-    const logWrap = liveLogHost ? liveLogHost.querySelector('.log-wrap') : null;
-    const controls = liveLogHost ? liveLogHost.querySelector('.log-controls') : null;
-    if (button) {
-      button.textContent = logPaused ? 'Resume' : 'Pause';
-      button.style.display = autoRefreshEnabled ? 'none' : '';
-    }
-    if (state) {
-      state.style.display = autoRefreshEnabled ? 'none' : '';
-      state.textContent = logPaused ? 'paused' : 'live';
-      state.className = 'tag ' + (logPaused ? 'tag-warn' : 'tag-status');
-    }
-    if (controls) {
-      controls.style.display = autoRefreshEnabled ? 'none' : '';
-    }
-    if (logWrap) {
-      logWrap.classList.toggle('live', !logPaused);
-      logWrap.classList.toggle('paused', logPaused);
-    }
-    updateFilterButtons();
-    renderLogHistory(null, true);
-  };
-
-  const closeLogStream = () => {
-    if (logSource) {
-      logSource.close();
-      logSource = null;
-    }
-  };
-
-  const openLogStream = () => {
-    if (autoRefreshEnabled || logPaused || !window.EventSource || logSource) return;
-    closeLogStream();
-    try {
-      logSource = new EventSource('/log-stream');
-      logSource.onopen = () => {
-        const state = document.getElementById('logLiveState');
-        if (state) {
-          state.textContent = 'live';
-          state.className = 'tag tag-status';
-          state.style.display = autoRefreshEnabled ? 'none' : '';
-        }
-      };
-      logSource.addEventListener('log', (event) => {
-        if (logPaused || !liveLogHost) return;
-        const wrap = liveLogHost.querySelector('.log-wrap');
-        if (!wrap) return;
-        const parsed = parseLogEntry(event.data);
-        logHistory.push(parsed);
-        if (!matchesLogFilters(parsed)) {
-          return;
-        }
-        const beforeScrollTop = wrap.scrollTop;
-        const beforeScrollHeight = wrap.scrollHeight;
-        const empty = wrap.querySelector('.soft');
-        if (empty) empty.remove();
-        wrap.insertBefore(createLogEntryElement(parsed), wrap.firstChild);
-        trimLogEntries();
-        preserveLiveScroll(wrap, beforeScrollTop, beforeScrollHeight);
-      });
-      logSource.onerror = () => {
-        if (autoRefreshEnabled || logPaused) return;
-        const state = document.getElementById('logLiveState');
-        if (state) {
-          state.textContent = 'reconnecting';
-          state.className = 'tag tag-warn';
-          state.style.display = autoRefreshEnabled ? 'none' : '';
-        }
-      };
-    } catch (err) {
-      closeLogStream();
-    }
-  };
-
-  if (liveLogHost) {
-    liveLogHost.addEventListener('click', (event) => {
-      const target = event.target.closest('button');
-      if (!target) return;
-      if (target.id === 'logToggle') {
-        logPaused = !logPaused;
-        localStorage.setItem(logStateKey, logPaused ? '1' : '0');
-        setLogUi();
-        if (logPaused) {
-          closeLogStream();
-        } else {
-          openLogStream();
-        }
-        return;
-      }
-      if (target.id === 'logKindsToggle') {
-        const shouldShowAll = !isAnyKindEnabled();
-        allLogKinds.forEach((kind) => {
-          logKindFilters[kind] = shouldShowAll;
-        });
-        localStorage.setItem(logKindFiltersKey, JSON.stringify(logKindFilters));
-        setLogUi();
-        return;
-      }
-      if (target.id === 'logTagsToggle') {
-        const shouldShowAll = !isAnyFilterEnabled();
-        allLogTags.forEach((tag) => {
-          logFilters[tag] = shouldShowAll;
-        });
-        localStorage.setItem(logFiltersKey, JSON.stringify(logFilters));
-        setLogUi();
-        return;
-      }
-      const tag = target.dataset.filterTag;
-      if (tag) {
-        const upper = tag.toUpperCase();
-        logFilters[upper] = logFilters[upper] === false;
-        localStorage.setItem(logFiltersKey, JSON.stringify(logFilters));
-        setLogUi();
-        return;
-      }
-      const kind = target.dataset.filterKind;
-      if (!kind) return;
-      const lower = kind.toLowerCase();
-      logKindFilters[lower] = logKindFilters[lower] === false;
-      localStorage.setItem(logKindFiltersKey, JSON.stringify(logKindFilters));
-      setLogUi();
-    });
-  }
-
-  const startLiveLog = () => {
-    const mountLog = () => {
-      setLogUi();
-      trimLogEntries();
-      if (autoRefreshEnabled) {
-        return;
-      }
-      openLogStream();
-    };
-    if (!liveLogHost) {
-      return;
-    }
-    fetch('/log', { cache: 'no-store' })
-      .then((response) => response.json())
-      .then((entries) => {
-        renderLogHistory(entries);
-        mountLog();
-      })
-      .catch(() => {
-        liveLogHost.innerHTML = "<div class='card'><div class='soft'>Failed to load live log.</div></div>";
-      });
-  };
-
-  startLiveLog();
 </script>
 </body></html>
+)rawliteral";
+
+extern const char LOG_HTML[] PROGMEM = R"rawliteral(
+<!doctype html>
+<html lang='uk'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>BMS Logs</title>
+  <style>
+    __UI_SHARED_CSS__
+    body{__UI_THEME_BASE_VARS__padding:18px}
+    __CUSTOM_CSS__
+    .wrap{max-width:1100px;margin:0 auto}
+    .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.08)}
+    h1{margin:0;font-size:30px}
+    .card{margin:0 0 16px 0;padding:16px}
+    .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);color:var(--muted);font-size:12px}
+    .pill.live{color:var(--ok)}
+    .pill.offline{color:var(--bad)}
+    .log-wrap{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:12px;background:rgba(20,20,20,.78);backdrop-filter:blur(6px);font-family:Consolas,Monaco,'Courier New',monospace;font-size:12px;line-height:1.45;resize:vertical;box-sizing:border-box}
+    .log-wrap.live{overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable}
+    .log-wrap.paused{overflow:auto}
+    .log-head{display:flex;flex-direction:column;gap:10px;position:sticky;top:0;z-index:5;padding:0 0 12px;background:linear-gradient(to bottom, rgba(18,18,18,.99), rgba(18,18,18,.96) 72%, rgba(18,18,18,0))}
+    .log-head h2{margin:0}
+    .log-controls{display:flex;flex-direction:column;align-items:stretch;gap:8px;min-width:0;padding:10px 12px;border:1px solid rgba(255,255,255,.06);border-radius:14px;background:rgba(24,24,24,.96);backdrop-filter:blur(8px)}
+    .log-control-row{display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;min-width:0}
+    #logLiveState{min-width:11ch;text-align:center;justify-content:center;display:inline-flex}
+    .log-line{display:flex;gap:10px;align-items:flex-start;padding:5px .3em;border-bottom:1px solid rgba(255,255,255,0.05);word-break:break-word}
+    .log-line[hidden]{display:none !important}
+    .log-line:last-child{border-bottom:0}
+    .log-time{flex:0 0 auto;min-width:18ch;color:var(--muted);font-size:11px;letter-spacing:.02em}
+    .log-tag{flex:0 0 auto;min-width:58px;text-align:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.04em;border:1px solid transparent}
+    .log-kind{flex:0 0 auto;min-width:72px;text-align:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.04em;border:1px solid transparent;color:#fff;background:rgba(42,42,42,.48)}
+    .log-msg{flex:1 1 auto;white-space:pre-wrap;color:var(--text)}
+    .log-tag-bms{background:rgba(24,48,71,.78);color:#cfe7ff;border-color:rgba(49,101,144,.8)}
+    .log-tag-can{background:rgba(23,57,47,.78);color:#c7f5e2;border-color:rgba(44,122,104,.8)}
+    .log-tag-cfg{background:rgba(51,43,23,.78);color:#ffe6ad;border-color:rgba(129,101,32,.8)}
+    .log-tag-boot{background:rgba(47,35,62,.78);color:#eadcff;border-color:rgba(110,90,143,.8)}
+    .log-tag-wifi{background:rgba(20,47,45,.78);color:#c8f0ec;border-color:rgba(42,115,111,.8)}
+    .log-tag-http{background:rgba(38,38,38,.78);color:#e4e4e4;border-color:rgba(85,85,85,.8)}
+    .log-tag-ota{background:rgba(59,31,42,.78);color:#ffd7e5;border-color:rgba(138,66,95,.8)}
+    .log-tag-ap{background:rgba(43,42,22,.78);color:#f4efb0;border-color:rgba(119,113,46,.8)}
+    .log-tag-stat{background:rgba(29,45,29,.78);color:#d7f0d7;border-color:rgba(79,123,79,.8)}
+    .log-tag-debug{background:rgba(32,32,32,.78);color:#d2d2d2;border-color:rgba(85,85,85,.8)}
+    .log-tag-gen{background:rgba(38,38,38,.78);color:#dcdcdc;border-color:rgba(85,85,85,.8)}
+    .log-kind-info{background:rgba(52,52,52,.48);border-color:rgba(102,102,102,.8)}
+    .log-kind-warning{background:rgba(122,90,23,.48);border-color:rgba(184,139,43,.8)}
+    .log-kind-fail{background:rgba(122,47,29,.48);border-color:rgba(192,90,62,.8)}
+    .log-kind-error{background:rgba(122,31,40,.48);border-color:rgba(184,71,85,.8)}
+    .log-kind-rx{background:rgba(31,79,120,.48);border-color:rgba(74,143,208,.8)}
+    .log-kind-tx{background:rgba(111,45,92,.48);border-color:rgba(179,90,154,.8)}
+    .log-btn{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:6px 12px;border-radius:999px;font:inherit;font-size:12px;cursor:pointer}
+    .log-btn:hover{border-color:var(--accent)}
+    .log-filter{appearance:none;border:1px solid var(--line);background:rgba(34,34,34,.86);color:var(--muted);padding:5px 10px;border-radius:999px;font:inherit;font-size:11px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
+    .log-filter.active{color:var(--text);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.06)}
+    .log-filter-bms.active{background:#183047;border-color:#316590;color:#cfe7ff}
+    .log-filter-can.active{background:#17392f;border-color:#2c7a68;color:#c7f5e2}
+    .log-filter-stat.active{background:#1d2d1d;border-color:#4f7b4f;color:#d7f0d7}
+    .log-filter-cfg.active{background:#332b17;border-color:#816520;color:#ffe6ad}
+    .log-filter-boot.active{background:#2f233e;border-color:#6e5a8f;color:#eadcff}
+    .log-filter-wifi.active{background:#142f2d;border-color:#2a736f;color:#c8f0ec}
+    .log-filter-http.active{background:#262626;border-color:#555;color:#e4e4e4}
+    .log-filter-ota.active{background:#3b1f2a;border-color:#8a425f;color:#ffd7e5}
+    .log-filter-ap.active{background:#2b2a16;border-color:#77712e;color:#f4efb0}
+    .log-filter-dbg.active{background:#202020;border-color:#555;color:#d2d2d2}
+    .log-filter-gen.active{background:#262626;border-color:#555;color:#dcdcdc}
+    .log-filter-info.active{background:rgba(52,52,52,.78);border-color:rgba(102,102,102,.8);color:#fff}
+    .log-filter-warning.active{background:rgba(122,90,23,.78);border-color:rgba(184,139,43,.85);color:#fff2ba}
+    .log-filter-fail.active{background:rgba(122,47,29,.78);border-color:rgba(192,90,62,.85);color:#ffd0c2}
+    .log-filter-error.active{background:rgba(122,31,40,.78);border-color:rgba(184,71,85,.85);color:#ffd4d9}
+    .log-filter-rx.active{background:rgba(31,79,120,.78);border-color:rgba(74,143,208,.85);color:#d8efff}
+    .log-filter-tx.active{background:rgba(111,45,92,.78);border-color:rgba(179,90,154,.85);color:#f4d5eb}
+    .log-filter-toggle.active{background:#43381a;border-color:#8f7a33;color:#fff2ba}
+    .log-filter:hover{border-color:var(--accent)}
+    @media (max-width:560px){.hero{flex-direction:column;align-items:flex-start}}
+  </style>
+</head>
+<body>
+  <div class='wrap'>
+    <div class='hero'>
+      <div><h1>Live Log</h1></div>
+      __TOP_ACTION__
+    </div>
+    <div id='liveLogHost'>
+      <div class='card' id='liveLogCard'>
+        <div class='log-head'>
+          <div class='log-controls'>
+            <div class='log-control-row'>
+              <span class='pill live' id='logLiveState'>live</span>
+              <button type='button' class='log-btn' id='logToggle'>Pause</button>
+              <button type='button' class='log-btn' id='logReload'>Reload</button>
+            </div>
+            <div class='log-control-row'>
+              <button type='button' class='log-filter log-filter-info active' data-filter-kind='info'>info</button>
+              <button type='button' class='log-filter log-filter-warning active' data-filter-kind='warning'>warning</button>
+              <button type='button' class='log-filter log-filter-fail active' data-filter-kind='fail'>fail</button>
+              <button type='button' class='log-filter log-filter-error active' data-filter-kind='error'>error</button>
+              <button type='button' class='log-filter log-filter-rx active' data-filter-kind='rx'>rx</button>
+              <button type='button' class='log-filter log-filter-tx active' data-filter-kind='tx'>tx</button>
+              <button type='button' class='log-filter log-filter-toggle active' id='logKindsToggle'>Hide kinds</button>
+            </div>
+            <div class='log-control-row'>
+              <button type='button' class='log-filter log-filter-bms active' data-filter-tag='BMS'>BMS</button>
+              <button type='button' class='log-filter log-filter-can active' data-filter-tag='CAN'>CAN</button>
+              <button type='button' class='log-filter log-filter-stat active' data-filter-tag='STAT'>STAT</button>
+              <button type='button' class='log-filter log-filter-cfg active' data-filter-tag='CFG'>CFG</button>
+              <button type='button' class='log-filter log-filter-boot active' data-filter-tag='BOOT'>BOOT</button>
+              <button type='button' class='log-filter log-filter-wifi active' data-filter-tag='WIFI'>WIFI</button>
+              <button type='button' class='log-filter log-filter-http active' data-filter-tag='HTTP'>HTTP</button>
+              <button type='button' class='log-filter log-filter-ota active' data-filter-tag='OTA'>OTA</button>
+              <button type='button' class='log-filter log-filter-ap active' data-filter-tag='AP'>AP</button>
+              <button type='button' class='log-filter log-filter-dbg active' data-filter-tag='D'>DBG</button>
+              <button type='button' class='log-filter log-filter-gen active' data-filter-tag='GEN'>GEN</button>
+              <button type='button' class='log-filter log-filter-toggle active' id='logTagsToggle'>Hide tags</button>
+            </div>
+          </div>
+        </div>
+        <div class='log-wrap'>
+          <div class='soft'>Loading live log...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const logStateKey = 'bms.logPaused';
+    const logFiltersKey = 'bms.logFilters';
+    const logKindFiltersKey = 'bms.logKindFilters';
+    const allLogTags = ['BMS', 'CAN', 'STAT', 'CFG', 'BOOT', 'WIFI', 'HTTP', 'OTA', 'AP', 'D', 'GEN'];
+    const allLogKinds = ['info', 'warning', 'fail', 'error', 'rx', 'tx'];
+    const defaultFilterState = Object.fromEntries(allLogTags.map((tag) => [tag, true]));
+    const defaultKindFilterState = Object.fromEntries(allLogKinds.map((kind) => [kind, true]));
+    const liveLogHost = document.getElementById('liveLogHost');
+    const autoRefreshEnabled = false;
+    let logPaused = localStorage.getItem(logStateKey) === '1';
+    let logFilters = (() => {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(logFiltersKey) || 'null');
+        if (parsed && typeof parsed === 'object') return { ...defaultFilterState, ...parsed };
+      } catch (e) {}
+      return { ...defaultFilterState };
+    })();
+    let logKindFilters = (() => {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(logKindFiltersKey) || 'null');
+        if (parsed && typeof parsed === 'object') {
+          const merged = { ...defaultKindFilterState, ...parsed };
+          if (Object.prototype.hasOwnProperty.call(parsed, 'msg') && !Object.prototype.hasOwnProperty.call(parsed, 'info')) {
+            merged.info = parsed.msg;
+          }
+          delete merged.msg;
+          return merged;
+        }
+      } catch (e) {}
+      return { ...defaultKindFilterState };
+    })();
+    let logSource = null;
+    let logHistory = [];
+    let logFetchAbort = null;
+    let logStartupTimer = null;
+    let logPageActive = true;
+
+    const byId = (id) => document.getElementById(id);
+    const formatElapsed = (value) => {
+      const totalMs = Math.max(0, Math.floor(Number(value || 0)));
+      const totalSeconds = Math.floor(totalMs / 1000);
+      const millis = totalMs % 1000;
+      const hours = Math.floor(totalSeconds / 3600);
+      const rem = totalSeconds % 3600;
+      const minutes = Math.floor(rem / 60);
+      const seconds = rem % 60;
+      return `+${String(hours).padStart(5, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}s`;
+    };
+    const logTagClassForName = (tag) => {
+      const upper = String(tag || 'GEN').toUpperCase();
+      if (upper === 'BMS') return 'log-tag-bms';
+      if (upper === 'CAN') return 'log-tag-can';
+      if (upper === 'CFG') return 'log-tag-cfg';
+      if (upper === 'BOOT') return 'log-tag-boot';
+      if (upper === 'WIFI') return 'log-tag-wifi';
+      if (upper === 'HTTP') return 'log-tag-http';
+      if (upper === 'OTA') return 'log-tag-ota';
+      if (upper === 'AP') return 'log-tag-ap';
+      if (upper === 'STAT') return 'log-tag-stat';
+      if (upper === 'D') return 'log-tag-debug';
+      return 'log-tag-gen';
+    };
+    const logKindClassForName = (kind) => {
+      const lower = String(kind || 'info').toLowerCase();
+      if (lower === 'warning') return 'log-kind-warning';
+      if (lower === 'fail') return 'log-kind-fail';
+      if (lower === 'error') return 'log-kind-error';
+      if (lower === 'rx') return 'log-kind-rx';
+      if (lower === 'tx') return 'log-kind-tx';
+      return 'log-kind-info';
+    };
+    const inferLogKindClass = (line) => {
+      const lower = String(line || '').toLowerCase();
+      const hasWord = (pattern) => new RegExp(pattern).test(lower);
+      if (hasWord('\\berror\\b') || hasWord('\\bfailed\\b') || hasWord('\\btimeout\\b') || hasWord('\\boffline\\b') || hasWord('\\bbus-off\\b') || hasWord('\\bfault\\b')) return 'log-kind-error';
+      if (hasWord('\\bwarn\\b') || hasWord('\\bdisabled\\b') || hasWord('\\bfallback\\b')) return 'log-kind-warning';
+      if (lower.startsWith('rx ') || lower.startsWith('rx:') || lower.startsWith('rx=') || lower.includes(' rx=')) return 'log-kind-rx';
+      if (lower.startsWith('tx ') || lower.startsWith('tx:') || lower.startsWith('tx=') || lower.includes(' tx=')) return 'log-kind-tx';
+      if (hasWord('\\bfail\\b') || hasWord('\\bfailure\\b')) return 'log-kind-fail';
+      return 'log-kind-info';
+    };
+    const normalizeLogEntry = (entry) => {
+      if (typeof entry === 'string') {
+        try { return normalizeLogEntry(JSON.parse(entry)); } catch (e) { return { ts: 0, line: entry }; }
+      }
+      if (!entry || typeof entry !== 'object') return { ts: 0, line: '' };
+      const ts = Number(entry.ts ?? entry.time_ms ?? entry.time ?? 0);
+      const line = String(entry.line ?? entry.raw ?? '');
+      return { ts: Number.isFinite(ts) ? ts : 0, line };
+    };
+    const parseLogEntry = (entry) => {
+      const { ts, line } = normalizeLogEntry(entry);
+      let tag = 'GEN';
+      let message = line;
+      if (line.startsWith('[')) {
+        const end = line.indexOf(']');
+        if (end > 1) {
+          tag = line.slice(1, end);
+          message = line.slice(end + 1).trimStart();
+        }
+      }
+      const tagUpper = tag.toUpperCase();
+      const kindClass = inferLogKindClass(message || line);
+      const kind = kindClass.replace('log-kind-', '');
+      return { ts, line, tag, tagUpper, message, kindClass, kind };
+    };
+    const matchesLogFilters = (entry) => logFilters[entry.tagUpper] !== false && logKindFilters[entry.kind] !== false;
+    const createLogEntryElement = (entry) => {
+      const el = document.createElement('div');
+      el.className = 'log-line ' + entry.kindClass;
+      el.dataset.tag = entry.tagUpper;
+      el.dataset.kind = entry.kind;
+      el.dataset.logEntry = '1';
+      const timeEl = document.createElement('span');
+      timeEl.className = 'log-time';
+      timeEl.textContent = entry.ts > 0 ? formatElapsed(entry.ts) : '';
+      const tagEl = document.createElement('span');
+      tagEl.className = 'log-tag ' + logTagClassForName(entry.tag);
+      tagEl.textContent = entry.tag;
+      const msgEl = document.createElement('span');
+      msgEl.className = 'log-msg';
+      msgEl.textContent = entry.message;
+      el.appendChild(timeEl);
+      el.appendChild(tagEl);
+      if (entry.kindClass !== 'log-kind-info') {
+        const kindEl = document.createElement('span');
+        kindEl.className = 'log-kind ' + entry.kindClass;
+        kindEl.textContent = entry.kind;
+        el.appendChild(kindEl);
+      }
+      el.appendChild(msgEl);
+      return el;
+    };
+    const preserveLiveScroll = (wrap, beforeScrollTop, beforeScrollHeight) => {
+      const delta = wrap.scrollHeight - beforeScrollHeight;
+      const nearTop = beforeScrollTop <= 24;
+      wrap.scrollTop = nearTop ? 0 : Math.max(0, beforeScrollTop + delta);
+    };
+    const updateEmptyState = (wrap) => {
+      const empty = wrap.querySelector('.soft');
+      const visible = wrap.querySelector('.log-line:not([hidden])');
+      if (visible) { if (empty) empty.remove(); return; }
+      if (empty) {
+        empty.textContent = logHistory.length === 0 ? 'No log entries yet.' : 'No log entries match current filters.';
+      } else {
+        const msg = document.createElement('div');
+        msg.className = 'soft';
+        msg.textContent = logHistory.length === 0 ? 'No log entries yet.' : 'No log entries match current filters.';
+        wrap.appendChild(msg);
+      }
+    };
+    const trimLogEntries = () => {
+      if (!liveLogHost) return;
+      const wrap = liveLogHost.querySelector('.log-wrap');
+      if (!wrap) return;
+      const logDomLimit = 1000;
+      while (wrap.querySelectorAll('.log-line').length > logDomLimit) {
+        const lines = Array.from(wrap.querySelectorAll('.log-line'));
+        const hiddenLine = lines.reverse().find((line) => line.hidden);
+        const toRemove = hiddenLine || wrap.querySelector('.log-line:last-of-type');
+        if (!toRemove) break;
+        toRemove.remove();
+      }
+      updateEmptyState(wrap);
+    };
+    const isAnyFilterEnabled = () => allLogTags.some((tag) => logFilters[tag] !== false);
+    const isAllFilterEnabled = () => allLogTags.every((tag) => logFilters[tag] !== false);
+    const isAnyKindEnabled = () => allLogKinds.some((kind) => logKindFilters[kind] !== false);
+    const isAllKindEnabled = () => allLogKinds.every((kind) => logKindFilters[kind] !== false);
+    const updateFilterButtons = () => {
+      const kindsToggle = byId('logKindsToggle');
+      if (kindsToggle) {
+        const allVisible = isAllKindEnabled();
+        kindsToggle.textContent = allVisible ? 'Hide kinds' : 'Show kinds';
+        kindsToggle.className = 'log-filter log-filter-toggle' + (!allVisible ? ' active' : '');
+      }
+      const tagsToggle = byId('logTagsToggle');
+      if (tagsToggle) {
+        const allVisible = isAllFilterEnabled();
+        tagsToggle.textContent = allVisible ? 'Hide tags' : 'Show tags';
+        tagsToggle.className = 'log-filter log-filter-toggle' + (!allVisible ? ' active' : '');
+      }
+      document.querySelectorAll('[data-filter-tag]').forEach((btn) => {
+        const tag = (btn.dataset.filterTag || 'GEN').toUpperCase();
+        const enabled = logFilters[tag] !== false;
+        btn.className = 'log-filter ' + logTagClassForName(tag).replace('log-tag-', 'log-filter-') + (enabled ? ' active' : '');
+      });
+      document.querySelectorAll('[data-filter-kind]').forEach((btn) => {
+        const kind = (btn.dataset.filterKind || 'info').toLowerCase();
+        const enabled = logKindFilters[kind] !== false;
+        btn.className = 'log-filter ' + logKindClassForName(kind).replace('log-kind-', 'log-filter-') + (enabled ? ' active' : '');
+      });
+    };
+    const setLogUi = () => {
+      const button = byId('logToggle');
+      const reload = byId('logReload');
+      const state = byId('logLiveState');
+      const wrap = liveLogHost ? liveLogHost.querySelector('.log-wrap') : null;
+      const controls = liveLogHost ? liveLogHost.querySelector('.log-controls') : null;
+      if (button) {
+        button.textContent = logPaused ? 'Resume' : 'Pause';
+      }
+      if (reload) {
+        reload.style.display = logPaused ? '' : 'none';
+      }
+      if (state) {
+        state.textContent = logPaused ? 'paused' : 'live';
+        state.className = 'pill ' + (logPaused ? 'offline' : 'live');
+      }
+      if (controls) controls.style.display = '';
+      if (wrap) wrap.classList.toggle('paused', logPaused);
+      updateFilterButtons();
+      logHistory.forEach((entry) => {
+        if (entry.el) entry.el.hidden = !matchesLogFilters(entry);
+      });
+      if (wrap) updateEmptyState(wrap);
+    };
+    const closeLogStream = () => {
+      if (logSource) {
+        logSource.close();
+        logSource = null;
+      }
+    };
+    const stopLiveLog = () => {
+      logPageActive = false;
+      if (logStartupTimer) {
+        clearTimeout(logStartupTimer);
+        logStartupTimer = null;
+      }
+      if (logFetchAbort) {
+        logFetchAbort.abort();
+        logFetchAbort = null;
+      }
+      closeLogStream();
+    };
+    const fetchLogHistory = async (preserveScroll = false) => {
+      const wrap = liveLogHost.querySelector('.log-wrap');
+      if (!wrap) return;
+      const beforeScrollTop = preserveScroll ? wrap.scrollTop : 0;
+      const beforeScrollHeight = preserveScroll ? wrap.scrollHeight : 0;
+      try {
+        if (logFetchAbort) logFetchAbort.abort();
+        logFetchAbort = new AbortController();
+        const response = await fetch('/log', { cache: 'no-store', signal: logFetchAbort.signal });
+        const entries = await response.json();
+        if (!logPageActive) return;
+        logHistory = Array.isArray(entries) ? entries.map(parseLogEntry) : [];
+        const frag = document.createDocumentFragment();
+        for (let i = logHistory.length - 1; i >= 0; i--) {
+          const entry = logHistory[i];
+          const el = createLogEntryElement(entry);
+          entry.el = el;
+          el.hidden = !matchesLogFilters(entry);
+          frag.appendChild(el);
+        }
+        wrap.innerHTML = '';
+        wrap.appendChild(frag);
+        trimLogEntries();
+        updateEmptyState(wrap);
+        if (preserveScroll) preserveLiveScroll(wrap, beforeScrollTop, beforeScrollHeight);
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
+        wrap.innerHTML = "<div class='soft'>Failed to load live log.</div>";
+      } finally {
+        if (logFetchAbort && logFetchAbort.signal.aborted) {
+          logFetchAbort = null;
+        }
+      }
+    };
+    const openLogStream = () => {
+      if (!logPageActive || logPaused || !window.EventSource || logSource) return;
+      closeLogStream();
+      try {
+        logSource = new EventSource('/log-stream');
+        logSource.addEventListener('log', (event) => {
+          if (logPaused || !liveLogHost) return;
+          const wrap = liveLogHost.querySelector('.log-wrap');
+          if (!wrap) return;
+          const parsed = parseLogEntry(event.data);
+          logHistory.push(parsed);
+          const beforeScrollTop = wrap.scrollTop;
+          const beforeScrollHeight = wrap.scrollHeight;
+          const el = createLogEntryElement(parsed);
+          parsed.el = el;
+          el.hidden = !matchesLogFilters(parsed);
+          wrap.insertBefore(el, wrap.firstChild);
+          trimLogEntries();
+          preserveLiveScroll(wrap, beforeScrollTop, beforeScrollHeight);
+          updateEmptyState(wrap);
+        });
+      } catch (err) {
+        closeLogStream();
+      }
+    };
+    window.addEventListener('pagehide', stopLiveLog);
+    window.addEventListener('beforeunload', stopLiveLog);
+    if (liveLogHost) {
+      liveLogHost.addEventListener('click', (event) => {
+        const target = event.target.closest('button');
+        if (!target) return;
+        if (target.id === 'logToggle') {
+          logPaused = !logPaused;
+          localStorage.setItem(logStateKey, logPaused ? '1' : '0');
+          setLogUi();
+          if (logPaused) closeLogStream(); else openLogStream();
+          return;
+        }
+        if (target.id === 'logReload') {
+          if (!logPaused) return;
+          fetchLogHistory(true).then(setLogUi);
+          return;
+        }
+        if (target.id === 'logKindsToggle') {
+          const shouldShowAll = !isAllKindEnabled();
+          allLogKinds.forEach((kind) => { logKindFilters[kind] = shouldShowAll; });
+          localStorage.setItem(logKindFiltersKey, JSON.stringify(logKindFilters));
+          setLogUi();
+          return;
+        }
+        if (target.id === 'logTagsToggle') {
+          const shouldShowAll = !isAllFilterEnabled();
+          allLogTags.forEach((tag) => { logFilters[tag] = shouldShowAll; });
+          localStorage.setItem(logFiltersKey, JSON.stringify(logFilters));
+          setLogUi();
+          return;
+        }
+        const tag = target.dataset.filterTag;
+        if (tag) {
+          const upper = tag.toUpperCase();
+          logFilters[upper] = logFilters[upper] === false;
+          localStorage.setItem(logFiltersKey, JSON.stringify(logFilters));
+          setLogUi();
+          return;
+        }
+        const kind = target.dataset.filterKind;
+        if (!kind) return;
+        const lower = kind.toLowerCase();
+        logKindFilters[lower] = logKindFilters[lower] === false;
+        localStorage.setItem(logKindFiltersKey, JSON.stringify(logKindFilters));
+        setLogUi();
+      });
+    }
+    const startLiveLog = () => {
+      if (!liveLogHost) return;
+      logStartupTimer = window.setTimeout(() => {
+        if (!logPageActive || document.hidden) return;
+        fetchLogHistory(false).then(() => {
+          if (!logPageActive) return;
+          setLogUi();
+          openLogStream();
+        });
+      }, 120);
+    };
+    startLiveLog();
+  </script>
+</body>
+</html>
 )rawliteral";
 
 extern const char SETUP_HTML[] PROGMEM = R"rawliteral(
