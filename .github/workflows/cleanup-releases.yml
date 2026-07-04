@@ -1,0 +1,163 @@
+name: Cleanup Releases
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_latest_releases:
+        description: "How many newest releases to keep if tags are not provided"
+        required: false
+        default: "5"
+        type: number
+      tags:
+        description: "Comma-separated list of tags to delete"
+        required: false
+        default: ""
+        type: string
+      delete_runs:
+        description: "Delete completed workflow runs except failures"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cleanup workflow runs, releases, and tags
+        uses: actions/github-script@v8
+        env:
+          KEEP_LATEST_RELEASES: ${{ inputs.keep_latest_releases }}
+          CLEANUP_TAGS: ${{ inputs.tags }}
+          DELETE_RUNS: ${{ inputs.delete_runs }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const keepLatestReleases = Number(process.env.KEEP_LATEST_RELEASES || '5');
+            const tagsInput = String(process.env.CLEANUP_TAGS || '').trim();
+            const deleteRuns = String(process.env.DELETE_RUNS || 'true').toLowerCase() === 'true';
+
+            const normalizeVersionKey = (tag) => {
+              let name = String(tag || '').trim();
+              if (name.startsWith('v')) name = name.slice(1);
+
+              const oldFormat = name.match(/^(\d{4})\.(\d{2})\.(\d{2})-(\d{2})\.(\d{2})$/);
+              if (oldFormat) {
+                return `${oldFormat[1]}${oldFormat[2]}${oldFormat[3]}${oldFormat[4]}${oldFormat[5]}00000`;
+              }
+
+              const newFormat = name.match(/^(\d{12})(?:-(\d{5}))?$/);
+              if (newFormat) {
+                return `${newFormat[1]}${newFormat[2] || '00000'}`;
+              }
+
+              return name;
+            };
+
+            const releasePages = await github.paginate(github.rest.repos.listReleases, {
+              owner,
+              repo,
+              per_page: 100,
+            });
+
+            const releases = releasePages
+              .filter((release) => release.tag_name)
+              .map((release) => ({
+                id: release.id,
+                tag: release.tag_name,
+                key: normalizeVersionKey(release.tag_name),
+                createdAt: release.created_at || '',
+              }))
+              .sort((a, b) => {
+                if (a.key !== b.key) return a.key < b.key ? 1 : -1;
+                if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? 1 : -1;
+                return 0;
+              });
+
+            let targets = [];
+            if (tagsInput) {
+              const wantedRaw = new Set(tagsInput.split(',').map((tag) => tag.trim()).filter(Boolean));
+              const wantedNormalized = new Set([...wantedRaw].map(normalizeVersionKey));
+              targets = releases.filter((release) =>
+                wantedRaw.has(release.tag) ||
+                wantedRaw.has(release.tag.replace(/^v/, '')) ||
+                wantedNormalized.has(release.key)
+              );
+            } else {
+              targets = releases.slice(keepLatestReleases);
+            }
+
+            core.info(`Repository: ${owner}/${repo}`);
+            core.info(`Matched releases: ${releases.length}`);
+            if (tagsInput) {
+              core.info(`Target tags: ${tagsInput}`);
+            } else {
+              core.info(`Keeping latest: ${keepLatestReleases}`);
+            }
+            core.info(`Deleting releases/tags: ${targets.length}`);
+
+            const deleteRun = async (run) => {
+              try {
+                await github.rest.actions.deleteWorkflowRun({
+                  owner,
+                  repo,
+                  run_id: run.id,
+                });
+                core.info(`Deleted run #${run.id} (${run.name || run.workflow_name || 'workflow'})`);
+              } catch (error) {
+                if (error.status === 404) return;
+                throw error;
+              }
+            };
+
+            const deleteReleaseAndTag = async (release) => {
+              try {
+                await github.rest.repos.deleteRelease({
+                  owner,
+                  repo,
+                  release_id: release.id,
+                });
+                core.info(`Deleted release ${release.tag}`);
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+
+              try {
+                await github.rest.git.deleteRef({
+                  owner,
+                  repo,
+                  ref: `tags/${release.tag}`,
+                });
+                core.info(`Deleted tag ${release.tag}`);
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+            };
+
+            if (deleteRuns) {
+              const runPages = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+                owner,
+                repo,
+                per_page: 100,
+              });
+
+              const deletableRuns = runPages.filter((run) =>
+                run.status === 'completed' && run.conclusion !== 'failure'
+              );
+
+              core.info(`Completed non-failure runs to delete: ${deletableRuns.length}`);
+              for (const run of deletableRuns) {
+                await deleteRun(run);
+              }
+            }
+
+            for (const release of targets) {
+              await deleteReleaseAndTag(release);
+            }
