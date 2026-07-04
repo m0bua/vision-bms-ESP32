@@ -30,7 +30,9 @@ extern const char UI_SHARED_CSS[] PROGMEM = R"rawliteral(
   .top-nav a{display:inline-flex;align-items:center;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font-size:13px;line-height:1.2;white-space:nowrap}
   .top-nav a:hover{border-color:var(--accent)}
   .top-nav .active{display:inline-flex;align-items:center;padding:6px 12px;border-radius:999px;border:1px solid var(--accent);background:rgba(128,203,196,.12);color:var(--accent);font-size:13px;line-height:1.2;white-space:nowrap;pointer-events:none;cursor:default}
+  .build-badge{position:fixed;right:12px;bottom:12px;z-index:30;max-width:min(360px,calc(100vw - 24px));padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:rgba(22,22,22,.9);color:var(--muted);font:600 11px/1.2 Consolas,Monaco,'Courier New',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;box-shadow:0 10px 24px rgba(0,0,0,.22)}
   @media (max-width:560px){.top-nav{justify-content:flex-start}.top-nav a,.top-nav .active{padding:6px 10px;font-size:12px}}
+  @media (max-width:560px){.build-badge{right:8px;bottom:8px;max-width:calc(100vw - 16px);font-size:10px}}
 )rawliteral";
 
 extern const char UI_SHARED_JS[] PROGMEM = R"rawliteral(
@@ -90,7 +92,7 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
     __UI_SHARED_CSS__
     body{__UI_THEME_BASE_VARS__}
     __CUSTOM_CSS__
-    .wrap{max-width:1280px;margin:0 auto;padding:20px}
+    .wrap{max-width:1280px;margin:0 auto;padding:20px 20px 72px}
     .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.08)}
     .hero-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:flex-end}
     h1{margin:0;font-size:28px}
@@ -203,6 +205,7 @@ extern const char INDEX_HTML[] PROGMEM = R"rawliteral(
 
     </div>
   </div>
+  __BUILD_BADGE__
   <script>
 __UI_SHARED_JS__
     function renderCells(data, minV, maxV) {
@@ -301,7 +304,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   body{__UI_THEME_BASE_VARS__padding:18px}
   __CUSTOM_CSS__
   #clickable{cursor:pointer;margin-bottom:.5em}
-  .wrap{max-width:1100px;margin:0 auto}
+  .wrap{max-width:1100px;margin:0 auto;padding-bottom:72px}
   .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.08)}
   h1{margin:0;font-size:30px}
   .card{margin:0 0 16px 0;padding:16px}
@@ -421,10 +424,6 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
     <div>Temp sensors: __DEBUG_TEMP_SENSOR_COUNT__ | Raw: <span class='muted'>__DEBUG_TEMP_SENSORS__</span></div>
     <div>CRC rx: __CRC_RX__ | CRC calc: __CRC_CALC__</div>
   </div>
-  <div class='card'>
-    <h2 style='margin:0'>Live log moved</h2>
-    <div class='soft'>The live log is now on <a href='/logs'>/logs</a>.</div>
-  </div>
   <div class='card' style='margin-top:16px'>
     <h2 style="margin:0">Debug</h2>
     <div>Polls: __DEBUG_POLL_COUNT__ | Success: __DEBUG_SUCCESS_COUNT__ | Fail: __DEBUG_FAIL_COUNT__</div>
@@ -433,6 +432,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   </div>
   __DIAG_BLOCKS__
 </div>
+__BUILD_BADGE__
 <script>
   const refreshSeconds = Number(document.body.dataset.refreshSeconds || 0);
   const toggleRefresh = () => {
@@ -463,7 +463,7 @@ extern const char LOG_HTML[] PROGMEM = R"rawliteral(
     __UI_SHARED_CSS__
     body{__UI_THEME_BASE_VARS__padding:18px}
     __CUSTOM_CSS__
-    .wrap{max-width:1100px;margin:0 auto}
+    .wrap{max-width:1100px;margin:0 auto;padding-bottom:72px}
     .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.08)}
     h1{margin:0;font-size:30px}
     .card{margin:0 0 16px 0;padding:16px}
@@ -574,6 +574,7 @@ extern const char LOG_HTML[] PROGMEM = R"rawliteral(
       </div>
     </div>
   </div>
+  __BUILD_BADGE__
   <script>
     const logStateKey = 'bms.logPaused';
     const logFiltersKey = 'bms.logFilters';
@@ -945,7 +946,7 @@ extern const char SETUP_HTML[] PROGMEM = R"rawliteral(
     __UI_SHARED_CSS__
     body{__UI_THEME_BASE_VARS__padding:18px}
     __CUSTOM_CSS__
-    .wrap{max-width:1100px;margin:0 auto}
+    .wrap{max-width:1100px;margin:0 auto;padding-bottom:72px}
     .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px}
     h1{margin:0;font-size:30px}
     .sub{color:var(--muted);margin-top:6px}
@@ -1130,6 +1131,7 @@ extern const char SETUP_HTML[] PROGMEM = R"rawliteral(
       </div>
     </form>
   </div>
+  __BUILD_BADGE__
   <script>
     const canToggle = document.getElementById('enable_deye_can');
     const canPins = document.querySelectorAll('.can-pin');

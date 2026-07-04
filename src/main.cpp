@@ -8,6 +8,14 @@
 #include <driver/twai.h>
 #include <stdarg.h>
 #include <cstring>
+#include "build_info_generated.h"
+
+#ifndef BUILD_VERSION_STRING
+#define BUILD_VERSION_STRING "unknown"
+#define BUILD_VERSION_SOURCE "local"
+#define BUILD_VERSION_STAMP "unknown"
+#define BUILD_VERSION_TITLE "local unknown"
+#endif
 
 constexpr uint8_t BMS_REG_COUNT = 0x24; // 0x0000..0x0023
 constexpr size_t BMS_RAW_REGS = BMS_REG_COUNT;
@@ -137,6 +145,7 @@ void handleSetup();
 void handleDashboard();
 void handleLogs();
 String buildTopNavHtml(const char *activePage);
+String buildBadgeHtml();
 void handleFirmwareUpdate();
 void handleFirmwareUpdateUpload();
 
@@ -1793,6 +1802,7 @@ String buildSetupHtml()
                                    ? String("Access point is active on ") + AP_SSID + " (" + AP_IP.toString() + ")"
                                    : String("Wi-Fi state: ") + (WiFi.status() == WL_CONNECTED ? String("connected as ") + WiFi.SSID() : String("not connected")));
   html.replace("__TOP_ACTION__", buildTopNavHtml("setup"));
+  html.replace("__BUILD_BADGE__", buildBadgeHtml());
   html.replace("__WIFI_SSID__", htmlEscape(String(cfg.wifiSsid)));
   html.replace("__WIFI_HIDDEN_CHECKED__", cfg.wifiHidden ? "checked" : "");
   html.replace("__ENABLE_CAN_CHECKED__", cfg.enableDeyeCan ? "checked" : "");
@@ -1820,6 +1830,7 @@ void handleDashboard()
   html.replace("__CUSTOM_CSS__", String(cfg.customCss));
   html.replace("__UI_SHARED_JS__", String(FPSTR(UI_SHARED_JS)));
   html.replace("__TOP_ACTION__", buildTopNavHtml("dashboard"));
+  html.replace("__BUILD_BADGE__", buildBadgeHtml());
   server.send(200, "text/html", html);
 }
 
@@ -2041,6 +2052,16 @@ String buildTopNavHtml(const char *activePage)
   return html;
 }
 
+String buildBadgeHtml()
+{
+  String html = "<div class='build-badge' title='";
+  html += htmlEscape(String(BUILD_VERSION_TITLE));
+  html += "'>";
+  html += htmlEscape(String(BUILD_VERSION_STRING));
+  html += "</div>";
+  return html;
+}
+
 void handleDiag()
 {
   uint16_t refreshSeconds = 0;
@@ -2057,6 +2078,7 @@ void handleDiag()
   html.replace("__UI_SHARED_CSS__", String(FPSTR(UI_SHARED_CSS)));
   html.replace("__CUSTOM_CSS__", String(cfg.customCss));
   html.replace("__TOP_ACTION__", buildTopNavHtml("diag"));
+  html.replace("__BUILD_BADGE__", buildBadgeHtml());
   html.replace("__REFRESH_META__", refreshSeconds > 0 ? String("<meta http-equiv='refresh' content='") + String(refreshSeconds) + "'>" : "");
   html.replace("__REFRESH_SECONDS__", String(refreshSeconds));
   html.replace("__REFRESH_STATE__", refreshSeconds > 0 ? String("on (") + String(refreshSeconds) + " s)" : "off");
@@ -2113,6 +2135,7 @@ void handleLogs()
   html.replace("__UI_SHARED_CSS__", String(FPSTR(UI_SHARED_CSS)));
   html.replace("__CUSTOM_CSS__", String(cfg.customCss));
   html.replace("__TOP_ACTION__", buildTopNavHtml("logs"));
+  html.replace("__BUILD_BADGE__", buildBadgeHtml());
   html.replace("__LOG_DOM_LIMIT__", String(cfg.logDomLimit));
   server.send(200, "text/html", html);
 }
@@ -2324,6 +2347,11 @@ void fillTelemetryJson(JsonObject root)
   {
     rawRegs.add(bms.rawRegs[i]);
   }
+
+  JsonObject build = root.createNestedObject("build");
+  build["version"] = BUILD_VERSION_STRING;
+  build["source"] = BUILD_VERSION_SOURCE;
+  build["stamp"] = BUILD_VERSION_STAMP;
 }
 
 void handleJson()

@@ -25,7 +25,20 @@ jobs:
       - name: Set release version
         id: version
         shell: bash
-        run: echo "tag=v$(date -u +%Y.%m.%d-%H.%M)" >> "$GITHUB_OUTPUT"
+        run: |
+          version=$(python - <<'PY'
+          from datetime import datetime, timezone
+          import subprocess
+
+          commit_date = subprocess.check_output(
+              ["git", "show", "-s", "--format=%cI", "HEAD"],
+              text=True,
+          ).strip()
+          dt = datetime.fromisoformat(commit_date.replace("Z", "+00:00")).astimezone(timezone.utc)
+          print(dt.strftime("%Y%m%d%H%M"))
+          PY
+          )
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -41,10 +54,10 @@ jobs:
       - name: Create or update release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: ${{ steps.version.outputs.tag }}
+          tag_name: ${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.version }}
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
           make_latest: true
           files: |
-            .pio/build/esp32doit-devkit-v1/firmware.bin
+            .pio/build/esp32doit-devkit-v1/firmware-${{ steps.version.outputs.version }}.bin

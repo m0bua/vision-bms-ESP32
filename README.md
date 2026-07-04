@@ -59,6 +59,7 @@ The resulting firmware file will be here:
 
 ```text
 .pio/build/esp32doit-devkit-v1/firmware.bin
+.pio/build/esp32doit-devkit-v1/firmware-<version>.bin
 ```
 
 ## Home Assistant
