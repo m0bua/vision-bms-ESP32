@@ -99,6 +99,7 @@ struct BmsSnapshot
   uint16_t remainingAh = 0;
   uint16_t maxChargeCurrentLimit = 0;
   uint16_t status = 0;
+  uint16_t chargeStatus = 0;
   uint16_t warning = 0;
   uint16_t protect = 0;
   uint16_t cycles = 0;
@@ -736,6 +737,8 @@ const char *rawRegisterName(uint8_t index)
     return "SOH";
   case 0x18:
     return "SOC";
+  case 0x19:
+    return "charge status";
   case 0x1B:
     return "status";
   case 0x1C:
@@ -763,10 +766,13 @@ struct FlagName
   const char *name;
 };
 
-const FlagName STATUS_FLAGS[] = {
-    {0x0001, "Discharge"},
-    {0x0002, "Charge"},
+const FlagName MAIN_STATUS_FLAGS[] = {
     {0x1000, "Balancing"},
+};
+
+const FlagName CHARGE_STATUS_FLAGS[] = {
+    {0x0001, "Charge"},
+    {0x0002, "Discharge"},
 };
 
 const FlagName WARNING_FLAGS[] = {
@@ -843,6 +849,10 @@ String batteryStateText()
   return bms.online ? "ONLINE" : "OFFLINE";
 }
 
+String statusFlagsText();
+String statusCategory();
+String haStatusCategory();
+
 String healthText()
 {
   if (bms.warning != 0)
@@ -858,45 +868,7 @@ String healthText()
 
 String operatingStateText()
 {
-  if (!bms.online)
-  {
-    return "Offline";
-  }
-  const bool dischargeEnabled = (bms.status & 0x0001) != 0;
-  const bool chargeEnabled = (bms.status & 0x0002) != 0;
-  if (dischargeEnabled && chargeEnabled)
-  {
-    return "Charging + Discharging";
-  }
-  if (chargeEnabled)
-  {
-    return "Charging";
-  }
-  if (dischargeEnabled)
-  {
-    return "Discharging";
-  }
-  if (bms.protect != 0)
-  {
-    return "Protected";
-  }
-  if (bms.warning != 0)
-  {
-    return "Warning";
-  }
-  if (bms.status == 0 || (bms.warning == 2 && bms.protect == 4096 && fabs(bms.current) < 0.5f && bms.soc >= 95))
-  {
-    return "Standby";
-  }
-  if ((bms.status & 0x1000) != 0)
-  {
-    return "Balancing";
-  }
-  if (bms.status != 0)
-  {
-    return "Active";
-  }
-  return "Normal";
+  return statusCategory();
 }
 
 String healthClass()
@@ -912,13 +884,58 @@ String healthClass()
   return "soft";
 }
 
+String chargeStatusText()
+{
+  return decodeBitmask(bms.chargeStatus, CHARGE_STATUS_FLAGS, sizeof(CHARGE_STATUS_FLAGS) / sizeof(CHARGE_STATUS_FLAGS[0]));
+}
+
+String statusCategory()
+{
+  if (!bms.online)
+  {
+    return "Offline";
+  }
+  if (bms.protect != 0)
+  {
+    return "Protected";
+  }
+  if (bms.warning != 0)
+  {
+    return "Warning";
+  }
+  const bool charging = (bms.chargeStatus & 0x0001) != 0;
+  const bool discharging = (bms.chargeStatus & 0x0002) != 0;
+  if (charging && discharging)
+  {
+    return "Charging + Discharging";
+  }
+  if (charging)
+  {
+    return "Charging";
+  }
+  if (discharging)
+  {
+    return "Discharging";
+  }
+  return statusFlagsText();
+}
+
 String statusFlagsText()
 {
+  if (!bms.online)
+  {
+    return "Offline";
+  }
   if (bms.status == 0)
   {
     return "Standby";
   }
-  return decodeBitmask(bms.status, STATUS_FLAGS, sizeof(STATUS_FLAGS) / sizeof(STATUS_FLAGS[0]));
+  const String decoded = decodeBitmask(bms.status, MAIN_STATUS_FLAGS, sizeof(MAIN_STATUS_FLAGS) / sizeof(MAIN_STATUS_FLAGS[0]));
+  if (decoded != "none")
+  {
+    return decoded;
+  }
+  return "Active";
 }
 
 String warningFlagsText()
@@ -933,20 +950,82 @@ String protectFlagsText()
 
 String haStatusCategory()
 {
-  if (bms.protect != 0)
+  const String category = statusCategory();
+  if (category == "Offline")
+    return "offline";
+  if (category == "Protected")
     return "protected";
-  if (bms.warning != 0)
+  if (category == "Warning")
     return "warning";
+  if (category == "Charging" || category == "Discharging" || category == "Charging + Discharging")
+    return "charging";
   return "status";
 }
 
 String statusDetailText()
 {
-  if (bms.protect != 0)
-    return "Protected (" + protectFlagsText() + ")";
-  if (bms.warning != 0)
-    return "Warning (" + warningFlagsText() + ")";
+  return statusCategory();
+}
+
+String statusMessageText()
+{
+  const String category = statusCategory();
+  if (category == "Protected")
+    return protectFlagsText();
+  if (category == "Warning")
+    return warningFlagsText();
+  if (category == "Charging" || category == "Discharging" || category == "Charging + Discharging")
+    return chargeStatusText();
   return statusFlagsText();
+}
+
+String rawRegisterCardClass(uint8_t index)
+{
+  switch (index)
+  {
+  case 0x00:
+  case 0x01:
+    return "reg-card reg-card-pack";
+  case 0x02:
+  case 0x03:
+  case 0x04:
+  case 0x05:
+  case 0x06:
+  case 0x07:
+  case 0x08:
+  case 0x09:
+  case 0x0A:
+  case 0x0B:
+  case 0x0C:
+  case 0x0D:
+  case 0x0E:
+  case 0x0F:
+  case 0x10:
+  case 0x11:
+    return "reg-card reg-card-cell";
+  case 0x12:
+  case 0x13:
+  case 0x14:
+  case 0x21:
+  case 0x22:
+    return "reg-card reg-card-temp";
+  case 0x15:
+  case 0x17:
+  case 0x18:
+    return "reg-card reg-card-metric";
+  case 0x19:
+  case 0x1B:
+  case 0x1C:
+  case 0x1D:
+    return "reg-card reg-card-status";
+  case 0x16:
+  case 0x1E:
+  case 0x1F:
+  case 0x20:
+    return "reg-card reg-card-config";
+  default:
+    return "reg-card reg-card-unknown";
+  }
 }
 
 String buildDiagRawRegistersHtml()
@@ -956,20 +1035,37 @@ String buildDiagRawRegistersHtml()
   html += "<div class='card'><h2 style='margin:0'>Raw registers</h2><div class='reg-grid'>";
   for (uint8_t i = 0; i < bms.rawCount; i++)
   {
-    html += "<div class='reg-card'>";
-    html += "<div class='reg-line reg-addr'>";
-    html += formatHex16(i);
-    html += "</div>";
-    html += "<div class='reg-line reg-hex'>";
-    html += formatHex16(bms.rawRegs[i]);
-    html += "</div>";
+    html += "<div class='";
+    html += rawRegisterCardClass(i);
+    html += "'>";
     html += "<div class='reg-line reg-name'>";
     html += rawRegisterName(i);
+    html += "</div>";
+    html += "<div class='reg-line reg-code'>";
+    html += formatHex16(i);
+    html += " = ";
+    html += formatHex16(bms.rawRegs[i]);
     html += "</div>";
     html += "<div class='reg-line reg-dec'>";
     if (i == 0x21 || i == 0x22)
     {
       html += formatTempPair(bms.rawRegs[i]);
+    }
+    else if (i == 0x19)
+    {
+      html += chargeStatusText();
+    }
+    else if (i == 0x1B)
+    {
+      html += statusFlagsText();
+    }
+    else if (i == 0x1C)
+    {
+      html += warningFlagsText();
+    }
+    else if (i == 0x1D)
+    {
+      html += protectFlagsText();
     }
     else
     {
@@ -988,11 +1084,11 @@ String buildDiagLastBmsFrameHtml()
   html.reserve(160 + dbg.lastResponseLen * 4);
   html += "<div class='card'><h2 style='margin:0'>Last BMS frame</h2>";
   html += "<div class='soft'>Last UART/Modbus response from the BMS, not CAN.</div>";
-  html += "<div class='reg-card' style='margin-top:12px'>";
-  html += "<div class='can-row' style='margin-top:0'><span class='can-k'>Len</span><span class='can-v'>";
+  html += "<div class='reg-card reg-card-meta' style='margin-top:12px'>";
+  html += "<div class='reg-line reg-name'>Frame</div>";
+  html += "<div class='reg-line reg-code'>Len ";
   html += String(dbg.lastResponseLen);
-  html += "</span></div>";
-  html += "<div class='reg-line reg-name' style='margin-top:8px'>Hex</div>";
+  html += "</div>";
   html += "<div class='reg-line reg-dec' style='word-break:break-all'>";
   html += htmlEscape(formatByteBuffer(dbg.lastResponse, dbg.lastResponseLen));
   html += "</div>";
@@ -1028,6 +1124,27 @@ static void appendCanField(String &html, const char *name, const String &value)
   html += "</span><span class='can-v'>";
   html += value;
   html += "</span></div>";
+}
+
+String canFrameCardClass(uint32_t id)
+{
+  switch (id)
+  {
+  case 0x351:
+    return "reg-card reg-card-status";
+  case 0x355:
+    return "reg-card reg-card-metric";
+  case 0x356:
+    return "reg-card reg-card-pack";
+  case 0x359:
+    return "reg-card reg-card-activity";
+  case 0x35E:
+    return "reg-card reg-card-meta";
+  case 0x35F:
+    return "reg-card reg-card-config";
+  default:
+    return "reg-card reg-card-unknown";
+  }
 }
 
 String buildDiagCanHtml()
@@ -1070,22 +1187,19 @@ String buildDiagCanHtml()
   for (uint8_t i = 0; i < dbg.canFrameCount; i++)
   {
     const auto &frame = dbg.canFrames[i];
-    html += "<div class='reg-card can-card'>";
-    html += "<div class='reg-line reg-addr'>ID ";
-    html += formatHex16((uint16_t)frame.id);
-    html += "</div>";
-    html += "<div class='reg-line reg-hex'>LEN ";
-    html += String(frame.len);
-    html += "</div>";
-    html += "<div class='reg-line reg-name'>Raw</div>";
-    html += "<div class='reg-line reg-dec' style='word-break:break-all'>";
-    html += htmlEscape(formatByteBuffer(frame.data, frame.len));
-    html += "</div>";
-    html += "<div class='reg-line reg-dec' style='word-break:break-all'>";
-    html += htmlEscape(formatByteBufferDec(frame.data, frame.len));
-    html += "</div>";
+    html += "<div class='";
+    html += canFrameCardClass(frame.id);
+    html += " can-card'>";
     html += "<div class='reg-line reg-name'>";
     html += canFrameTitle(frame.id);
+    html += "</div>";
+    html += "<div class='reg-line reg-code'>ID ";
+    html += formatHex16((uint16_t)frame.id);
+    html += " | LEN ";
+    html += String(frame.len);
+    html += "</div>";
+    html += "<div class='reg-line reg-dec' style='word-break:break-all'>";
+    html += htmlEscape(formatByteBuffer(frame.data, frame.len));
     html += "</div>";
     switch (frame.id)
     {
@@ -1280,8 +1394,10 @@ void decodeSnapshot()
   bms.maxChargeCurrentLimit = bms.rawRegs[0x16];
   bms.soh = bms.rawRegs[0x17];
   bms.soc = bms.rawRegs[0x18];
-  // Tentative mapping based on observed values: 0x1B=status, 0x1C=warning, 0x1D=protect.
-  bms.reservedStatus = bms.rawRegs[0x19];
+  // Observed mapping: 0x19 appears to be charge status, bit 0 = charging allowed/active.
+  // 0x1B=status, 0x1C=warning, 0x1D=protect remain the main status registers.
+  bms.chargeStatus = bms.rawRegs[0x19];
+  bms.reservedStatus = bms.chargeStatus;
   bms.cycles = bms.rawRegs[0x1A];
   bms.status = bms.rawRegs[0x1B];
   bms.warning = bms.rawRegs[0x1C];
@@ -1862,15 +1978,18 @@ void fillTelemetryJson(JsonObject root)
   status["health_text"] = healthText();
   status["operating_text"] = operatingStateText();
   status["category"] = haStatusCategory();
+  status["message"] = statusMessageText();
   status["text"] = statusDetailText();
   JsonObject statusRaw = status.createNestedObject("raw");
   statusRaw["status"] = bms.status;
+  statusRaw["charge_status"] = bms.chargeStatus;
   statusRaw["warning"] = bms.warning;
   statusRaw["protect"] = bms.protect;
   statusRaw["cycles"] = bms.cycles;
   statusRaw["reserved_status"] = bms.reservedStatus;
   JsonObject statusHex = status.createNestedObject("hex");
   statusHex["status"] = formatHex16(bms.status);
+  statusHex["charge_status"] = formatHex16(bms.chargeStatus);
   statusHex["warning"] = formatHex16(bms.warning);
   statusHex["protect"] = formatHex16(bms.protect);
   JsonObject diagnostics = root.createNestedObject("diagnostics");

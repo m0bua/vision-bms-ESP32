@@ -302,18 +302,33 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
   .card{margin:0 0 16px 0;padding:16px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
   .cell{padding:10px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);}
-  .reg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(9em,1fr));gap:12px;margin-top:12px}
+  .reg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(9.5em,1fr));gap:12px;margin-top:12px}
   .can-grid{grid-template-columns:repeat(auto-fill,minmax(18.5em,1fr))}
-  .reg-card{padding:12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line)}
-  .can-card{padding:12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line)}
+  .reg-card,.can-card{padding:12px;border-radius:14px;background:var(--panel2);border:1px solid var(--line);display:flex;flex-direction:column;gap:4px;position:relative;overflow:hidden}
+  .reg-card::before,.can-card::before{content:'';position:absolute;inset:0 0 auto 0;height:3px;background:transparent}
+  .reg-card-pack::before,.can-card-pack::before{background:linear-gradient(90deg,#4a7bb8,#cfe7ff)}
+  .reg-card-cell::before,.can-card-cell::before{background:linear-gradient(90deg,#2c7a68,#80cbc4)}
+  .reg-card-temp::before,.can-card-temp::before{background:linear-gradient(90deg,#8a6fbf,#d8c8ff)}
+  .reg-card-metric::before,.can-card-metric::before{background:linear-gradient(90deg,#666,#d0d0d0)}
+  .reg-card-activity::before,.can-card-activity::before{background:linear-gradient(90deg,#2c7a68,#80cbc4)}
+  .reg-card-status::before,.can-card-status::before{background:linear-gradient(90deg,#2c7a68,#80cbc4)}
+  .reg-card-config::before,.can-card-config::before{background:linear-gradient(90deg,#8b5e3c,#ffd3a6)}
+  .reg-card-meta::before,.reg-card-unknown::before,.can-card-meta::before,.can-card-unknown::before{background:linear-gradient(90deg,#555,#d0d0d0)}
+  .reg-card-pack,.can-card-pack{box-shadow:inset 0 0 0 1px rgba(207,231,255,.08)}
+  .reg-card-cell,.can-card-cell{box-shadow:inset 0 0 0 1px rgba(128,203,196,.08)}
+  .reg-card-temp,.can-card-temp{box-shadow:inset 0 0 0 1px rgba(255,230,173,.08)}
+  .reg-card-metric,.can-card-metric{box-shadow:inset 0 0 0 1px rgba(208,208,208,.08)}
+  .reg-card-activity,.reg-card-status,.can-card-activity,.can-card-status{box-shadow:inset 0 0 0 1px rgba(128,203,196,.08)}
+  .reg-card-config,.can-card-config{box-shadow:inset 0 0 0 1px rgba(255,211,166,.08)}
+  .reg-card-meta,.reg-card-unknown,.can-card-meta,.can-card-unknown{box-shadow:inset 0 0 0 1px rgba(208,208,208,.08)}
   .reg-line{line-height:1.35}
   .can-row{display:flex;justify-content:space-between;gap:12px;align-items:baseline;line-height:1.35;margin-top:4px}
   .can-k{color:var(--muted);font-size:12px;white-space:nowrap}
   .can-v{font-size:12px;text-align:right;word-break:break-word}
-  .reg-addr,.reg-hex,.reg-dec{word-break:break-all}
-  .reg-addr,.reg-hex{font-family:monospace;color:var(--muted);font-size:12px;display:inline-block;margin-right:1em;}
-  .reg-name{font-size:14px;font-weight:700;margin:4px 0;color:var(--text)}
-  .reg-dec{font-size:12px;color:var(--muted)}
+  .reg-code,.reg-dec{word-break:break-word}
+  .reg-code{font-family:monospace;color:var(--muted);font-size:12px}
+  .reg-name{font-size:14px;font-weight:700;margin:2px 0 1px;color:var(--text)}
+  .reg-dec{font-size:12px;color:var(--muted);margin-top:auto}
   .flag-group{margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#151515;}
   .flag-title{color:var(--muted);font-size:11px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;}
   .tag{display:inline-block;margin:0 6px 6px 0;padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid transparent;}
