@@ -512,6 +512,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
     return { ...defaultKindFilterState };
   })();
   let logSource = null;
+  let logHistory = [];
 
   const logTagClassForName = (tag) => {
     const upper = String(tag || 'GEN').toUpperCase();
@@ -593,7 +594,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
     return { ts: Number.isFinite(ts) ? ts : 0, line };
   };
 
-  const createLogEntryElement = (entry) => {
+  const parseLogEntry = (entry) => {
     const { ts, line } = normalizeLogEntry(entry);
     let tag = 'GEN';
     let message = line;
@@ -604,52 +605,76 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
         message = line.slice(end + 1).trimStart();
       }
     }
+    const tagUpper = tag.toUpperCase();
     const kindClass = inferLogKindClass(message || line);
-    const kindLabel = kindClass.replace('log-kind-', '');
+    const kind = kindClass.replace('log-kind-', '');
+    return { ts, line, tag, tagUpper, message, kindClass, kind };
+  };
+
+  const matchesLogFilters = (entry) => {
+    return logFilters[entry.tagUpper] !== false && logKindFilters[entry.kind] !== false;
+  };
+
+  const createLogEntryElement = (entry) => {
     const el = document.createElement('div');
-    el.className = 'log-line ' + kindClass;
-    el.dataset.tag = tag.toUpperCase();
-    el.dataset.kind = kindLabel;
+    el.className = 'log-line ' + entry.kindClass;
+    el.dataset.tag = entry.tagUpper;
+    el.dataset.kind = entry.kind;
 
     const timeEl = document.createElement('span');
     timeEl.className = 'log-time';
-    timeEl.textContent = ts > 0 ? formatElapsed(ts) : '';
+    timeEl.textContent = entry.ts > 0 ? formatElapsed(entry.ts) : '';
 
     const tagEl = document.createElement('span');
-    tagEl.className = 'log-tag ' + logTagClassForName(tag);
-    tagEl.textContent = tag;
+    tagEl.className = 'log-tag ' + logTagClassForName(entry.tag);
+    tagEl.textContent = entry.tag;
 
     const msgEl = document.createElement('span');
     msgEl.className = 'log-msg';
-    msgEl.textContent = message;
+    msgEl.textContent = entry.message;
 
     el.appendChild(timeEl);
     el.appendChild(tagEl);
-    if (kindClass !== 'log-kind-info') {
+    if (entry.kindClass !== 'log-kind-info') {
       const kindEl = document.createElement('span');
-      kindEl.className = 'log-kind ' + kindClass;
-      kindEl.textContent = kindLabel;
+      kindEl.className = 'log-kind ' + entry.kindClass;
+      kindEl.textContent = entry.kind;
       el.appendChild(kindEl);
     }
     el.appendChild(msgEl);
     return el;
   };
 
-  const renderLogHistory = (entries) => {
+  const renderLogHistory = (entries = null, preserveScroll = false) => {
     if (!liveLogHost) return;
     const wrap = liveLogHost.querySelector('.log-wrap');
     if (!wrap) return;
+    let beforeScrollTop = 0;
+    let beforeScrollHeight = 0;
+    if (preserveScroll) {
+      beforeScrollTop = wrap.scrollTop;
+      beforeScrollHeight = wrap.scrollHeight;
+    }
+    if (entries !== null) {
+      logHistory = Array.isArray(entries) ? entries.map(parseLogEntry) : [];
+    }
     wrap.innerHTML = '';
-    const list = Array.isArray(entries) ? entries : [];
-    if (list.length === 0) {
+    const visibleEntries = logHistory.filter(matchesLogFilters);
+    if (logHistory.length === 0) {
       wrap.innerHTML = "<div class='soft'>No log entries yet.</div>";
       return;
     }
-    list.forEach((entry) => {
+    if (visibleEntries.length === 0) {
+      wrap.innerHTML = "<div class='soft'>No log entries match current filters.</div>";
+      return;
+    }
+    visibleEntries.forEach((entry) => {
       wrap.insertBefore(createLogEntryElement(entry), wrap.firstChild);
     });
     trimLogEntries();
-    applyLogFilters();
+    if (preserveScroll) {
+      preserveLiveScroll(wrap, beforeScrollTop, beforeScrollHeight);
+    }
   };
 
   const formatElapsed = (value) => {
@@ -708,15 +733,6 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
     });
   };
 
-  const applyLogFilters = () => {
-    if (!liveLogHost) return;
-    liveLogHost.querySelectorAll('.log-line').forEach((line) => {
-      const tag = (line.dataset.tag || 'GEN').toUpperCase();
-      const kind = (line.dataset.kind || 'info').toLowerCase();
-      line.style.display = logFilters[tag] !== false && logKindFilters[kind] !== false ? '' : 'none';
-    });
-  };
-
   const preserveLiveScroll = (wrap, beforeScrollTop, beforeScrollHeight) => {
     const delta = wrap.scrollHeight - beforeScrollHeight;
     const nearTop = beforeScrollTop <= 24;
@@ -745,7 +761,7 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
       logWrap.classList.toggle('paused', logPaused);
     }
     updateFilterButtons();
-    applyLogFilters();
+    renderLogHistory(null, true);
   };
 
   const closeLogStream = () => {
@@ -772,14 +788,18 @@ extern const char DIAG_HTML[] PROGMEM = R"rawliteral(
         if (logPaused || !liveLogHost) return;
         const wrap = liveLogHost.querySelector('.log-wrap');
         if (!wrap) return;
+        const parsed = parseLogEntry(event.data);
+        logHistory.push(parsed);
+        if (!matchesLogFilters(parsed)) {
+          return;
+        }
         const beforeScrollTop = wrap.scrollTop;
         const beforeScrollHeight = wrap.scrollHeight;
         const empty = wrap.querySelector('.soft');
         if (empty) empty.remove();
-        wrap.insertBefore(createLogEntryElement(event.data), wrap.firstChild);
+        wrap.insertBefore(createLogEntryElement(parsed), wrap.firstChild);
         trimLogEntries();
         preserveLiveScroll(wrap, beforeScrollTop, beforeScrollHeight);
-        applyLogFilters();
       });
       logSource.onerror = () => {
         if (autoRefreshEnabled || logPaused) return;
@@ -1024,9 +1044,14 @@ extern const char SETUP_HTML[] PROGMEM = R"rawliteral(
             <h2 class='section-title'>Logs</h2>
             <div class='section-grid'>
               <div class='field third'>
-                <label for='log_buffer_size'>Device log buffer</label>
-                <input id='log_buffer_size' name='log_buffer_size' type='number' min='1' max='50' value='__LOG_BUFFER_SIZE__'>
-                <div class='note'>How many log entries are kept in RAM on the device.</div>
+                <label for='log_buffer_size_default'>Device log buffer</label>
+                <input id='log_buffer_size_default' name='log_buffer_size_default' type='number' min='1' max='__LOG_BUFFER_SIZE_MAX__' value='__LOG_BUFFER_SIZE_DEFAULT__'>
+                <div class='note'>How many log entries are kept in RAM for non-BMS/CAN tags.</div>
+              </div>
+              <div class='field third'>
+                <label for='log_buffer_size_bms_can'>BMS/CAN log buffer</label>
+                <input id='log_buffer_size_bms_can' name='log_buffer_size_bms_can' type='number' min='1' max='__LOG_BUFFER_SIZE_MAX__' value='__LOG_BUFFER_SIZE_BMS_CAN__'>
+                <div class='note'>How many log entries are kept in RAM for BMS and CAN.</div>
               </div>
               <div class='field third'>
                 <label for='log_dom_limit'>Browser log limit</label>

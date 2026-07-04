@@ -21,7 +21,9 @@ const IPAddress AP_MASK(255, 255, 255, 0);
 constexpr unsigned long WIFI_CONNECT_TIMEOUT_MS = 15000UL;
 constexpr size_t CUSTOM_CSS_MAX_LEN = 1536;
 constexpr size_t DEBUG_LOG_LINE_MAX = 192;
-constexpr uint16_t DEBUG_LOG_STORAGE_CAPACITY = 50;
+constexpr uint16_t DEBUG_LOG_STORAGE_CAPACITY = 20;
+constexpr uint16_t LOG_BUFFER_SIZE_DEFAULT = 10;
+constexpr uint16_t LOG_BUFFER_SIZE_BMS_CAN_DEFAULT = 20;
 constexpr uint16_t LOG_BUFFER_SIZE_MIN = 1;
 constexpr uint16_t LOG_BUFFER_SIZE_MAX = DEBUG_LOG_STORAGE_CAPACITY;
 constexpr uint16_t LOG_DOM_LIMIT_MIN = 1;
@@ -62,7 +64,8 @@ struct RuntimeConfig
   uint8_t bmsIdMin;
   uint8_t bmsIdMax;
 
-  uint16_t logBufferSize;
+  uint16_t logBufferSizeDefault;
+  uint16_t logBufferSizeBmsCan;
   uint16_t logDomLimit;
 
   char customCss[CUSTOM_CSS_MAX_LEN];
@@ -175,10 +178,11 @@ BmsDebugState dbg;
 
 struct DebugLogState
 {
-  char lines[DEBUG_LOG_STORAGE_CAPACITY][DEBUG_LOG_LINE_MAX] = {};
-  uint32_t times[DEBUG_LOG_STORAGE_CAPACITY] = {};
-  uint16_t count = 0;
-  uint16_t head = 0;
+  static constexpr uint8_t TAG_BUCKET_COUNT = 11;
+  char lines[TAG_BUCKET_COUNT][DEBUG_LOG_STORAGE_CAPACITY][DEBUG_LOG_LINE_MAX] = {};
+  uint32_t times[TAG_BUCKET_COUNT][DEBUG_LOG_STORAGE_CAPACITY] = {};
+  uint16_t count[TAG_BUCKET_COUNT] = {};
+  uint16_t head[TAG_BUCKET_COUNT] = {};
 };
 
 DebugLogState logState;
@@ -361,7 +365,8 @@ void setDefaultConfig()
   cfg.preferredBmsId = 16;
   cfg.bmsIdMin = 1;
   cfg.bmsIdMax = 16;
-  cfg.logBufferSize = 50;
+  cfg.logBufferSizeDefault = LOG_BUFFER_SIZE_DEFAULT;
+  cfg.logBufferSizeBmsCan = LOG_BUFFER_SIZE_BMS_CAN_DEFAULT;
   cfg.logDomLimit = 1000;
   cfg.customCss[0] = '\0';
 }
@@ -388,10 +393,14 @@ void sanitizeConfig()
   {
     cfg.preferredBmsId = cfg.bmsIdMax;
   }
-  if (cfg.logBufferSize < LOG_BUFFER_SIZE_MIN)
-    cfg.logBufferSize = 50;
-  if (cfg.logBufferSize > LOG_BUFFER_SIZE_MAX)
-    cfg.logBufferSize = LOG_BUFFER_SIZE_MAX;
+  if (cfg.logBufferSizeDefault < LOG_BUFFER_SIZE_MIN)
+    cfg.logBufferSizeDefault = LOG_BUFFER_SIZE_DEFAULT;
+  if (cfg.logBufferSizeDefault > LOG_BUFFER_SIZE_MAX)
+    cfg.logBufferSizeDefault = LOG_BUFFER_SIZE_MAX;
+  if (cfg.logBufferSizeBmsCan < LOG_BUFFER_SIZE_MIN)
+    cfg.logBufferSizeBmsCan = LOG_BUFFER_SIZE_BMS_CAN_DEFAULT;
+  if (cfg.logBufferSizeBmsCan > LOG_BUFFER_SIZE_MAX)
+    cfg.logBufferSizeBmsCan = LOG_BUFFER_SIZE_MAX;
   if (cfg.logDomLimit < LOG_DOM_LIMIT_MIN)
     cfg.logDomLimit = 1000;
   if (cfg.logDomLimit > LOG_DOM_LIMIT_MAX)
@@ -433,7 +442,8 @@ bool loadConfig()
   cfg.preferredBmsId = (uint8_t)configPrefs.getUChar("pref_bms_id", 16);
   cfg.bmsIdMin = (uint8_t)configPrefs.getUChar("bms_id_min", 1);
   cfg.bmsIdMax = (uint8_t)configPrefs.getUChar("bms_id_max", 16);
-  cfg.logBufferSize = configPrefs.getUShort("log_buf_sz", 50);
+  cfg.logBufferSizeDefault = configPrefs.getUShort("log_buf_sz_default", configPrefs.getUShort("log_buf_sz", LOG_BUFFER_SIZE_DEFAULT));
+  cfg.logBufferSizeBmsCan = configPrefs.getUShort("log_buf_sz_bms_can", LOG_BUFFER_SIZE_BMS_CAN_DEFAULT);
   cfg.logDomLimit = configPrefs.getUShort("log_dom_lim", 1000);
   configPrefs.end();
 
@@ -459,7 +469,8 @@ void saveConfig()
   configPrefs.putUChar("pref_bms_id", cfg.preferredBmsId);
   configPrefs.putUChar("bms_id_min", cfg.bmsIdMin);
   configPrefs.putUChar("bms_id_max", cfg.bmsIdMax);
-  configPrefs.putUShort("log_buf_sz", cfg.logBufferSize);
+  configPrefs.putUShort("log_buf_sz_default", cfg.logBufferSizeDefault);
+  configPrefs.putUShort("log_buf_sz_bms_can", cfg.logBufferSizeBmsCan);
   configPrefs.putUShort("log_dom_lim", cfg.logDomLimit);
   configPrefs.putString("custom_css", cfg.customCss);
   configPrefs.end();
@@ -495,6 +506,109 @@ String failReasonText(BmsFailReason reason)
   }
 }
 
+constexpr const char *LOG_TAG_NAMES[DebugLogState::TAG_BUCKET_COUNT] = {
+    "BMS",
+    "CAN",
+    "STAT",
+    "CFG",
+    "BOOT",
+    "WIFI",
+    "HTTP",
+    "OTA",
+    "AP",
+    "D",
+    "GEN",
+};
+
+constexpr uint8_t LOG_BUCKET_BMS = 0;
+constexpr uint8_t LOG_BUCKET_CAN = 1;
+
+uint8_t logTagBucketIndex(const char *tag)
+{
+  if (tag == nullptr || tag[0] == '\0')
+  {
+    return DebugLogState::TAG_BUCKET_COUNT - 1;
+  }
+
+  for (uint8_t i = 0; i < DebugLogState::TAG_BUCKET_COUNT; i++)
+  {
+    const char *ref = LOG_TAG_NAMES[i];
+    size_t j = 0;
+    for (; tag[j] != '\0' && ref[j] != '\0'; j++)
+    {
+      char a = tag[j];
+      char b = ref[j];
+      if (a >= 'a' && a <= 'z')
+        a = (char)(a - ('a' - 'A'));
+      if (b >= 'a' && b <= 'z')
+        b = (char)(b - ('a' - 'A'));
+      if (a != b)
+        break;
+    }
+    if (tag[j] == '\0' && ref[j] == '\0')
+    {
+      return i;
+    }
+  }
+
+  return DebugLogState::TAG_BUCKET_COUNT - 1;
+}
+
+uint16_t logBucketCapacity(uint8_t bucket)
+{
+  const uint16_t defaultCapacity = cfg.logBufferSizeDefault ? cfg.logBufferSizeDefault : LOG_BUFFER_SIZE_DEFAULT;
+  const uint16_t bmsCanCapacity = cfg.logBufferSizeBmsCan ? cfg.logBufferSizeBmsCan : LOG_BUFFER_SIZE_BMS_CAN_DEFAULT;
+  if (bucket == LOG_BUCKET_BMS || bucket == LOG_BUCKET_CAN)
+    return bmsCanCapacity;
+  return defaultCapacity;
+}
+
+void trimDebugLogState()
+{
+  for (uint8_t bucket = 0; bucket < DebugLogState::TAG_BUCKET_COUNT; bucket++)
+  {
+    const uint16_t capacity = logBucketCapacity(bucket);
+    if (logState.count[bucket] > capacity)
+    {
+      logState.count[bucket] = capacity;
+    }
+  }
+}
+
+void extractLogTag(const char *line, char *tagOut, size_t tagOutSize)
+{
+  if (tagOut == nullptr || tagOutSize == 0)
+  {
+    return;
+  }
+
+  snprintf(tagOut, tagOutSize, "GEN");
+  if (line == nullptr || line[0] != '[')
+  {
+    return;
+  }
+
+  const char *end = strchr(line + 1, ']');
+  if (end == nullptr || end <= line + 1)
+  {
+    return;
+  }
+
+  size_t len = (size_t)(end - (line + 1));
+  if (len >= tagOutSize)
+  {
+    len = tagOutSize - 1;
+  }
+  for (size_t i = 0; i < len; i++)
+  {
+    char ch = line[1 + i];
+    if (ch >= 'a' && ch <= 'z')
+      ch = (char)(ch - ('a' - 'A'));
+    tagOut[i] = ch;
+  }
+  tagOut[len] = '\0';
+}
+
 void appendDebugLog(const char *line)
 {
   if (line == nullptr || line[0] == '\0')
@@ -502,13 +616,20 @@ void appendDebugLog(const char *line)
     return;
   }
 
-  snprintf(logState.lines[logState.head], DEBUG_LOG_LINE_MAX, "%s", line);
-  logState.times[logState.head] = millis();
-  const uint16_t capacity = cfg.logBufferSize ? cfg.logBufferSize : 50;
-  logState.head = (uint16_t)((logState.head + 1) % capacity);
-  if (logState.count < capacity)
+  char tag[8];
+  extractLogTag(line, tag, sizeof(tag));
+  const uint8_t bucket = logTagBucketIndex(tag);
+  const uint16_t capacity = logBucketCapacity(bucket);
+  if (logState.count[bucket] > capacity)
   {
-    logState.count++;
+    logState.count[bucket] = capacity;
+  }
+  snprintf(logState.lines[bucket][logState.head[bucket]], DEBUG_LOG_LINE_MAX, "%s", line);
+  logState.times[bucket][logState.head[bucket]] = millis();
+  logState.head[bucket] = (uint16_t)((logState.head[bucket] + 1) % DEBUG_LOG_STORAGE_CAPACITY);
+  if (logState.count[bucket] < capacity)
+  {
+    logState.count[bucket]++;
   }
 }
 
@@ -525,6 +646,7 @@ void pruneLogStreamClients()
   }
 }
 
+static void appendDebugLogEntryJson(String &json, const char *line, uint32_t tsMs);
 static String buildDebugLogEntryJson(const char *line, uint32_t tsMs);
 String buildDebugLogJson();
 
@@ -599,30 +721,70 @@ static void appendJsonString(String &out, const char *value)
   out += '"';
 }
 
-static String buildDebugLogEntryJson(const char *line, uint32_t tsMs)
+static void appendDebugLogEntryJson(String &json, const char *line, uint32_t tsMs)
 {
-  String json;
-  json.reserve(32 + strlen(line ? line : "") + 8);
   json += "{\"ts\":";
   json += tsMs;
   json += ",\"line\":";
   appendJsonString(json, line);
   json += "}";
+}
+
+static String buildDebugLogEntryJson(const char *line, uint32_t tsMs)
+{
+  String json;
+  json.reserve(32 + strlen(line ? line : "") + 8);
+  appendDebugLogEntryJson(json, line, tsMs);
   return json;
 }
 
 String buildDebugLogJson()
 {
   String json;
-  json.reserve(64 + (size_t)logState.count * 256);
-  json += "[";
-  const uint16_t capacity = cfg.logBufferSize ? cfg.logBufferSize : 50;
-  for (uint16_t i = 0; i < logState.count; i++)
+  size_t totalCount = 0;
+  for (uint8_t bucket = 0; bucket < DebugLogState::TAG_BUCKET_COUNT; bucket++)
   {
-    if (i > 0)
+    const uint16_t capacity = logBucketCapacity(bucket);
+    totalCount += (logState.count[bucket] < capacity) ? logState.count[bucket] : capacity;
+  }
+  json.reserve(64 + totalCount * 256);
+  json += "[";
+  uint16_t capacity[DebugLogState::TAG_BUCKET_COUNT];
+  uint16_t remaining[DebugLogState::TAG_BUCKET_COUNT];
+  uint16_t cursor[DebugLogState::TAG_BUCKET_COUNT];
+  for (uint8_t bucket = 0; bucket < DebugLogState::TAG_BUCKET_COUNT; bucket++)
+  {
+    capacity[bucket] = logBucketCapacity(bucket);
+    remaining[bucket] = (logState.count[bucket] < capacity[bucket]) ? logState.count[bucket] : capacity[bucket];
+    cursor[bucket] = (uint16_t)((logState.head[bucket] + DEBUG_LOG_STORAGE_CAPACITY - remaining[bucket]) % DEBUG_LOG_STORAGE_CAPACITY);
+  }
+
+  bool first = true;
+  while (true)
+  {
+    int bestBucket = -1;
+    uint32_t bestTs = 0;
+    for (uint8_t bucket = 0; bucket < DebugLogState::TAG_BUCKET_COUNT; bucket++)
+    {
+      if (remaining[bucket] == 0)
+        continue;
+      const uint32_t ts = logState.times[bucket][cursor[bucket]];
+      if (bestBucket < 0 || ts < bestTs)
+      {
+        bestBucket = bucket;
+        bestTs = ts;
+      }
+    }
+    if (bestBucket < 0)
+    {
+      break;
+    }
+    if (!first)
       json += ",";
-    uint16_t index = (uint16_t)((logState.head + capacity - logState.count + i) % capacity);
-    json += buildDebugLogEntryJson(logState.lines[index], logState.times[index]);
+    first = false;
+    appendDebugLogEntryJson(json, logState.lines[bestBucket][cursor[bestBucket]], logState.times[bestBucket][cursor[bestBucket]]);
+    cursor[bestBucket] = (uint16_t)((cursor[bestBucket] + 1) % DEBUG_LOG_STORAGE_CAPACITY);
+    remaining[bestBucket]--;
   }
   json += "]";
   return json;
@@ -1691,7 +1853,9 @@ String buildSetupHtml()
   html.replace("__PREFERRED_BMS_ID__", String(cfg.preferredBmsId));
   html.replace("__BMS_ID_MIN__", String(cfg.bmsIdMin));
   html.replace("__BMS_ID_MAX__", String(cfg.bmsIdMax));
-  html.replace("__LOG_BUFFER_SIZE__", String(cfg.logBufferSize));
+  html.replace("__LOG_BUFFER_SIZE_DEFAULT__", String(cfg.logBufferSizeDefault));
+  html.replace("__LOG_BUFFER_SIZE_BMS_CAN__", String(cfg.logBufferSizeBmsCan));
+  html.replace("__LOG_BUFFER_SIZE_MAX__", String(LOG_BUFFER_SIZE_MAX));
   html.replace("__LOG_DOM_LIMIT__", String(cfg.logDomLimit));
   html.replace("__CUSTOM_CSS_TEXT__", htmlEscape(String(cfg.customCss)));
   return html;
@@ -1752,10 +1916,12 @@ void handleSave()
   cfg.preferredBmsId = (uint8_t)server.arg("preferred_bms_id").toInt();
   cfg.bmsIdMin = (uint8_t)server.arg("bms_id_min").toInt();
   cfg.bmsIdMax = (uint8_t)server.arg("bms_id_max").toInt();
-  cfg.logBufferSize = (uint16_t)server.arg("log_buffer_size").toInt();
+  cfg.logBufferSizeDefault = (uint16_t)server.arg("log_buffer_size_default").toInt();
+  cfg.logBufferSizeBmsCan = (uint16_t)server.arg("log_buffer_size_bms_can").toInt();
   cfg.logDomLimit = (uint16_t)server.arg("log_dom_limit").toInt();
   copyStringField(cfg.customCss, server.arg("custom_css"));
   sanitizeConfig();
+  trimDebugLogState();
   saveConfig();
   debugPrintf("[CFG] saved ssid='%s' can=%d bms=%u range=%u..%u",
               cfg.wifiSsid,
