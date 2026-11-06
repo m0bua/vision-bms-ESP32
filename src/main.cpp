@@ -21,7 +21,7 @@ constexpr uint8_t BMS_REG_COUNT = 0x24; // 0x0000..0x0023
 constexpr size_t BMS_RAW_REGS = BMS_REG_COUNT;
 constexpr size_t JSON_DOC_CAPACITY = 12288;
 constexpr uint32_t CONFIG_MAGIC = 0x424D5301UL;
-constexpr uint16_t CONFIG_VERSION = 1;
+constexpr uint16_t CONFIG_VERSION = 6;
 constexpr char CONFIG_NAMESPACE[] = "bmscfg";
 constexpr char AP_SSID[] = "BMS";
 const IPAddress AP_IP(192, 168, 0, 1);
@@ -36,6 +36,21 @@ constexpr uint16_t LOG_BUFFER_SIZE_MIN = 1;
 constexpr uint16_t LOG_BUFFER_SIZE_MAX = DEBUG_LOG_STORAGE_CAPACITY;
 constexpr uint16_t LOG_DOM_LIMIT_MIN = 1;
 constexpr uint16_t LOG_DOM_LIMIT_MAX = 5000;
+constexpr float PYLON_LIMIT_CELL_V_MIN = 2.3f;
+constexpr float PYLON_LIMIT_CELL_V_MAX = 3.7f;
+constexpr float PYLON_LIMIT_VOLTAGE_MIN = 10.0f;
+constexpr float PYLON_LIMIT_VOLTAGE_MAX = 70.0f;
+constexpr uint16_t PYLON_LIMIT_CURRENT_MIN = 0;
+constexpr uint16_t PYLON_LIMIT_CURRENT_MAX = 200;
+constexpr uint8_t PYLON_RULE_MAX_COUNT = 8;
+constexpr char KEY_LOG_BUF_DEFAULT[] = "logbufdef";
+constexpr char KEY_LOG_BUF_BMS_CAN[] = "logbufcan";
+constexpr char KEY_PYLON_COUNT[] = "prcnt";
+constexpr char KEY_PYLON_CELL_FMT[] = "pr%u_c";
+constexpr char KEY_PYLON_SOURCE_FMT[] = "pr%u_s";
+constexpr char KEY_PYLON_GT_FMT[] = "pr%u_g";
+constexpr char KEY_PYLON_VOLT_FMT[] = "pr%u_v";
+constexpr char KEY_PYLON_CURR_FMT[] = "pr%u_i";
 
 #ifndef ENABLE_DEBUG_SERIAL
 constexpr bool ENABLE_DEBUG_SERIAL = true;
@@ -75,6 +90,17 @@ struct RuntimeConfig
   uint16_t logBufferSizeDefault;
   uint16_t logBufferSizeBmsCan;
   uint16_t logDomLimit;
+
+  uint8_t pylonRuleCount;
+  struct PylonRule
+  {
+    float cellV;
+    bool useMinCell;
+    bool greaterThan;
+    char voltageText[16];
+    char currentText[16];
+  };
+  PylonRule pylonRules[PYLON_RULE_MAX_COUNT];
 
   char customCss[CUSTOM_CSS_MAX_LEN];
 };
@@ -148,6 +174,8 @@ String buildTopNavHtml(const char *activePage);
 String buildBadgeHtml();
 void handleFirmwareUpdate();
 void handleFirmwareUpdateUpload();
+void debugPrintf(const char *fmt, ...);
+void sendNoCacheHeaders();
 
 struct BmsDebugState
 {
@@ -349,9 +377,47 @@ String htmlEscape(const String &input)
   return out;
 }
 
+String jsonEscape(const String &input)
+{
+  String out;
+  out.reserve(input.length() * 2);
+  for (size_t i = 0; i < input.length(); i++)
+  {
+    char ch = input[i];
+    switch (ch)
+    {
+    case '\\':
+      out += "\\\\";
+      break;
+    case '"':
+      out += "\\\"";
+      break;
+    case '\n':
+      out += "\\n";
+      break;
+    case '\r':
+      break;
+    case '\t':
+      out += "\\t";
+      break;
+    default:
+      out += ch;
+      break;
+    }
+  }
+  return out;
+}
+
 template <size_t N>
 void copyStringField(char (&dest)[N], const String &value)
 {
+  snprintf(dest, N, "%s", value.c_str());
+}
+
+template <size_t N>
+void copyTrimmedField(char (&dest)[N], String value)
+{
+  value.trim();
   snprintf(dest, N, "%s", value.c_str());
 }
 
@@ -362,6 +428,113 @@ uint8_t clampPinValue(int value)
   if (value > 39)
     return 39;
   return (uint8_t)value;
+}
+
+static inline float clampFloatValue(float value, float minValue, float maxValue)
+{
+  if (value < minValue)
+    return minValue;
+  if (value > maxValue)
+    return maxValue;
+  return value;
+}
+
+static inline uint16_t clampU16Value(int value, uint16_t minValue, uint16_t maxValue)
+{
+  if (value < (int)minValue)
+    return minValue;
+  if (value > (int)maxValue)
+    return maxValue;
+  return (uint16_t)value;
+}
+
+static inline uint8_t clampU8Value(int value, uint8_t minValue, uint8_t maxValue)
+{
+  if (value < (int)minValue)
+    return minValue;
+  if (value > (int)maxValue)
+    return maxValue;
+  return (uint8_t)value;
+}
+
+template <size_t N>
+void copyFormattedFloatField(char (&dest)[N], float value, uint8_t decimals = 1)
+{
+  copyStringField(dest, formatJsonFloat(value, decimals));
+}
+
+template <size_t N>
+void copyFormattedU16Field(char (&dest)[N], uint16_t value)
+{
+  copyStringField(dest, String(value));
+}
+
+static inline float optionalTextToFloat(const char *text, float fallback)
+{
+  return (text != nullptr && text[0] != '\0') ? String(text).toFloat() : fallback;
+}
+
+static inline uint16_t optionalTextToU16(const char *text, uint16_t fallback)
+{
+  return (text != nullptr && text[0] != '\0') ? (uint16_t)String(text).toInt() : fallback;
+}
+
+String buildPylonRulesJson()
+{
+  String json = "[";
+  for (uint8_t i = 0; i < cfg.pylonRuleCount; i++)
+  {
+    if (i > 0)
+      json += ",";
+    json += "{\"cellV\":";
+    json += formatJsonFloat(cfg.pylonRules[i].cellV, 2);
+    json += ",\"useMinCell\":";
+    json += cfg.pylonRules[i].useMinCell ? "true" : "false";
+    json += ",\"greaterThan\":";
+    json += cfg.pylonRules[i].greaterThan ? "true" : "false";
+    json += ",\"voltageText\":\"";
+    json += jsonEscape(String(cfg.pylonRules[i].voltageText));
+    json += "\",\"currentText\":\"";
+    json += jsonEscape(String(cfg.pylonRules[i].currentText));
+    json += "\"}";
+  }
+  json += "]";
+  return json;
+}
+
+bool loadPylonRulesJson(const String &json)
+{
+  if (json.isEmpty())
+    return false;
+
+  DynamicJsonDocument doc(1536);
+  DeserializationError error = deserializeJson(doc, json);
+  if (error)
+  {
+    debugPrintf("[CFG] pylon json parse failed: %s", error.c_str());
+    return false;
+  }
+
+  JsonArray rules = doc.as<JsonArray>();
+  if (rules.isNull())
+    return false;
+
+  cfg.pylonRuleCount = 0;
+  for (JsonObject ruleObj : rules)
+  {
+    if (cfg.pylonRuleCount >= PYLON_RULE_MAX_COUNT)
+      break;
+
+    auto &rule = cfg.pylonRules[cfg.pylonRuleCount];
+    rule.cellV = ruleObj["cellV"] | 0.0f;
+    rule.useMinCell = ruleObj["useMinCell"] | false;
+    rule.greaterThan = ruleObj["greaterThan"] | true;
+    copyStringField(rule.voltageText, ruleObj["voltageText"] | "");
+    copyStringField(rule.currentText, ruleObj["currentText"] | "");
+    cfg.pylonRuleCount++;
+  }
+
+  return true;
 }
 
 void setDefaultConfig()
@@ -380,6 +553,7 @@ void setDefaultConfig()
   cfg.logBufferSizeDefault = LOG_BUFFER_SIZE_DEFAULT;
   cfg.logBufferSizeBmsCan = LOG_BUFFER_SIZE_BMS_CAN_DEFAULT;
   cfg.logDomLimit = 1000;
+  cfg.pylonRuleCount = 0;
   cfg.customCss[0] = '\0';
 }
 
@@ -417,6 +591,13 @@ void sanitizeConfig()
     cfg.logDomLimit = 1000;
   if (cfg.logDomLimit > LOG_DOM_LIMIT_MAX)
     cfg.logDomLimit = LOG_DOM_LIMIT_MAX;
+
+  if (cfg.pylonRuleCount > PYLON_RULE_MAX_COUNT)
+    cfg.pylonRuleCount = PYLON_RULE_MAX_COUNT;
+  for (uint8_t i = 0; i < cfg.pylonRuleCount; i++)
+  {
+    cfg.pylonRules[i].cellV = clampFloatValue(cfg.pylonRules[i].cellV, PYLON_LIMIT_CELL_V_MIN, PYLON_LIMIT_CELL_V_MAX);
+  }
   cfg.customCss[CUSTOM_CSS_MAX_LEN - 1] = '\0';
 }
 
@@ -430,7 +611,7 @@ bool loadConfig()
 
   const uint32_t magic = configPrefs.getUInt("magic", 0);
   const uint16_t version = configPrefs.getUShort("version", 0);
-  if (magic != CONFIG_MAGIC || version != CONFIG_VERSION)
+  if (magic != CONFIG_MAGIC || version > CONFIG_VERSION)
   {
     configPrefs.end();
     sanitizeConfig();
@@ -454,9 +635,63 @@ bool loadConfig()
   cfg.preferredBmsId = (uint8_t)configPrefs.getUChar("pref_bms_id", 16);
   cfg.bmsIdMin = (uint8_t)configPrefs.getUChar("bms_id_min", 1);
   cfg.bmsIdMax = (uint8_t)configPrefs.getUChar("bms_id_max", 16);
-  cfg.logBufferSizeDefault = configPrefs.getUShort("log_buf_sz_default", configPrefs.getUShort("log_buf_sz", LOG_BUFFER_SIZE_DEFAULT));
-  cfg.logBufferSizeBmsCan = configPrefs.getUShort("log_buf_sz_bms_can", LOG_BUFFER_SIZE_BMS_CAN_DEFAULT);
+  cfg.logBufferSizeDefault = configPrefs.getUShort(KEY_LOG_BUF_DEFAULT, configPrefs.getUShort("log_buf_sz", LOG_BUFFER_SIZE_DEFAULT));
+  cfg.logBufferSizeBmsCan = configPrefs.getUShort(KEY_LOG_BUF_BMS_CAN, LOG_BUFFER_SIZE_BMS_CAN_DEFAULT);
   cfg.logDomLimit = configPrefs.getUShort("log_dom_lim", 1000);
+  cfg.pylonRuleCount = 0;
+  if (version >= 6)
+  {
+    cfg.pylonRuleCount = configPrefs.getUChar(KEY_PYLON_COUNT, 0);
+    if (cfg.pylonRuleCount > PYLON_RULE_MAX_COUNT)
+      cfg.pylonRuleCount = PYLON_RULE_MAX_COUNT;
+    for (uint8_t i = 0; i < cfg.pylonRuleCount; i++)
+    {
+      char key[32];
+      snprintf(key, sizeof(key), KEY_PYLON_CELL_FMT, (unsigned)i);
+      cfg.pylonRules[i].cellV = configPrefs.getFloat(key, 0.0f);
+      snprintf(key, sizeof(key), KEY_PYLON_SOURCE_FMT, (unsigned)i);
+      cfg.pylonRules[i].useMinCell = configPrefs.getBool(key, false);
+      snprintf(key, sizeof(key), KEY_PYLON_GT_FMT, (unsigned)i);
+      cfg.pylonRules[i].greaterThan = configPrefs.getBool(key, true);
+      snprintf(key, sizeof(key), KEY_PYLON_VOLT_FMT, (unsigned)i);
+      copyStringField(cfg.pylonRules[i].voltageText, configPrefs.getString(key, ""));
+      snprintf(key, sizeof(key), KEY_PYLON_CURR_FMT, (unsigned)i);
+      copyStringField(cfg.pylonRules[i].currentText, configPrefs.getString(key, ""));
+    }
+  }
+  else if (version >= 5)
+  {
+    cfg.pylonRuleCount = configPrefs.getUChar(KEY_PYLON_COUNT, 0);
+    if (cfg.pylonRuleCount > PYLON_RULE_MAX_COUNT)
+      cfg.pylonRuleCount = PYLON_RULE_MAX_COUNT;
+    for (uint8_t i = 0; i < cfg.pylonRuleCount; i++)
+    {
+      char key[32];
+      char flagKey[32];
+      snprintf(key, sizeof(key), KEY_PYLON_CELL_FMT, (unsigned)i);
+      cfg.pylonRules[i].cellV = configPrefs.getFloat(key, 0.0f);
+      snprintf(key, sizeof(key), KEY_PYLON_SOURCE_FMT, (unsigned)i);
+      cfg.pylonRules[i].useMinCell = configPrefs.getBool(key, false);
+      snprintf(key, sizeof(key), KEY_PYLON_GT_FMT, (unsigned)i);
+      cfg.pylonRules[i].greaterThan = configPrefs.getBool(key, true);
+
+      snprintf(key, sizeof(key), KEY_PYLON_VOLT_FMT, (unsigned)i);
+      float voltageV = configPrefs.getFloat(key, 0.0f);
+      snprintf(flagKey, sizeof(flagKey), "pr%u_vs", (unsigned)i);
+      if (configPrefs.getBool(flagKey, true))
+      {
+        copyFormattedFloatField(cfg.pylonRules[i].voltageText, voltageV, 1);
+      }
+
+      snprintf(key, sizeof(key), KEY_PYLON_CURR_FMT, (unsigned)i);
+      uint16_t currentA = configPrefs.getUShort(key, 0);
+      snprintf(flagKey, sizeof(flagKey), "pr%u_is", (unsigned)i);
+      if (configPrefs.getBool(flagKey, true))
+      {
+        copyFormattedU16Field(cfg.pylonRules[i].currentText, currentA);
+      }
+    }
+  }
   configPrefs.end();
 
   sanitizeConfig();
@@ -464,9 +699,13 @@ bool loadConfig()
   return true;
 }
 
-void saveConfig()
+bool saveConfig()
 {
-  configPrefs.begin(CONFIG_NAMESPACE, false);
+  if (!configPrefs.begin(CONFIG_NAMESPACE, false))
+  {
+    debugPrintf("[CFG] save begin failed");
+    return false;
+  }
   configPrefs.putUInt("magic", CONFIG_MAGIC);
   configPrefs.putUShort("version", CONFIG_VERSION);
   configPrefs.putString("wifi_ssid", cfg.wifiSsid);
@@ -481,12 +720,48 @@ void saveConfig()
   configPrefs.putUChar("pref_bms_id", cfg.preferredBmsId);
   configPrefs.putUChar("bms_id_min", cfg.bmsIdMin);
   configPrefs.putUChar("bms_id_max", cfg.bmsIdMax);
-  configPrefs.putUShort("log_buf_sz_default", cfg.logBufferSizeDefault);
-  configPrefs.putUShort("log_buf_sz_bms_can", cfg.logBufferSizeBmsCan);
+  configPrefs.putUShort(KEY_LOG_BUF_DEFAULT, cfg.logBufferSizeDefault);
+  configPrefs.putUShort(KEY_LOG_BUF_BMS_CAN, cfg.logBufferSizeBmsCan);
   configPrefs.putUShort("log_dom_lim", cfg.logDomLimit);
+  configPrefs.putUChar(KEY_PYLON_COUNT, cfg.pylonRuleCount);
+  for (uint8_t i = 0; i < cfg.pylonRuleCount; i++)
+  {
+    char key[32];
+    snprintf(key, sizeof(key), KEY_PYLON_CELL_FMT, (unsigned)i);
+    configPrefs.putFloat(key, cfg.pylonRules[i].cellV);
+    snprintf(key, sizeof(key), KEY_PYLON_SOURCE_FMT, (unsigned)i);
+    configPrefs.putBool(key, cfg.pylonRules[i].useMinCell);
+    snprintf(key, sizeof(key), KEY_PYLON_GT_FMT, (unsigned)i);
+    configPrefs.putBool(key, cfg.pylonRules[i].greaterThan);
+    snprintf(key, sizeof(key), KEY_PYLON_VOLT_FMT, (unsigned)i);
+    configPrefs.putString(key, cfg.pylonRules[i].voltageText);
+    snprintf(key, sizeof(key), KEY_PYLON_CURR_FMT, (unsigned)i);
+    configPrefs.putString(key, cfg.pylonRules[i].currentText);
+  }
   configPrefs.putString("custom_css", cfg.customCss);
   configPrefs.end();
+  Preferences verifyPrefs;
+  if (!verifyPrefs.begin(CONFIG_NAMESPACE, true))
+  {
+    debugPrintf("[CFG] verify begin failed");
+    return false;
+  }
+  const uint32_t magic = verifyPrefs.getUInt("magic", 0);
+  const uint16_t version = verifyPrefs.getUShort("version", 0);
+  const String savedSsid = verifyPrefs.getString("wifi_ssid", "");
+  verifyPrefs.end();
+  if (magic != CONFIG_MAGIC || version != CONFIG_VERSION || savedSsid != String(cfg.wifiSsid))
+  {
+    debugPrintf("[CFG] verify failed magic=0x%08lX version=%u ssid='%s' rules=%u",
+                (unsigned long)magic,
+                version,
+                savedSsid.c_str(),
+                cfg.pylonRuleCount);
+    return false;
+  }
   configLoaded = true;
+  debugPrintf("[CFG] verified magic=0x%08lX version=%u ssid='%s'", (unsigned long)magic, version, savedSsid.c_str());
+  return true;
 }
 
 void clearConfig()
@@ -1385,7 +1660,7 @@ String buildDiagCanHtml()
       uint16_t w3 = (uint16_t)frame.data[6] | ((uint16_t)frame.data[7] << 8);
       appendCanField(html, "Word 0", String(w0));
       appendCanField(html, "Word 1", String(w1));
-      appendCanField(html, "Word 2", String(w2));
+      appendCanField(html, "Charge current limit", String(w2 / 10.0f, 1) + " A (" + String(w2) + ")");
       appendCanField(html, "Word 3", String(w3));
       break;
     }
@@ -1755,6 +2030,40 @@ void sendCanFrame(uint32_t id, uint8_t len, uint8_t *data)
   }
 }
 
+struct PylonChargeLimits
+{
+  float voltageV = 0.0f;
+  uint16_t currentA = 0;
+  float matchedCellV = 0.0f;
+  bool usedRule = false;
+};
+
+static PylonChargeLimits pylonChargeLimitsForCell(float minCellV, float maxCellV)
+{
+  PylonChargeLimits limits;
+  limits.voltageV = bms.rawRegs[0x1F] / 100.0f;
+  limits.currentA = bms.maxChargeCurrentLimit / 2;
+
+  for (uint8_t i = 0; i < cfg.pylonRuleCount; i++)
+  {
+    const auto &rule = cfg.pylonRules[i];
+    if (rule.cellV <= 0.0f)
+      continue;
+    float measuredCell = rule.useMinCell ? minCellV : maxCellV;
+    bool matched = rule.greaterThan ? (measuredCell > rule.cellV) : (measuredCell < rule.cellV);
+    if (matched)
+    {
+      limits.voltageV = optionalTextToFloat(rule.voltageText, bms.rawRegs[0x1F] / 100.0f);
+      limits.currentA = optionalTextToU16(rule.currentText, bms.maxChargeCurrentLimit / 2);
+      limits.matchedCellV = rule.cellV;
+      limits.usedRule = true;
+      break;
+    }
+  }
+
+  return limits;
+}
+
 void sendDeyeCanTelemetry()
 {
   if (!cfg.enableDeyeCan || !bms.online)
@@ -1771,9 +2080,13 @@ void sendDeyeCanTelemetry()
   uint16_t avgSoc = (uint16_t)bms.soc;
   uint16_t outV = (uint16_t)(bms.packV * 100.0f);
   int16_t outI = (int16_t)(bms.current * 10.0f);
+  PylonChargeLimits chargeLimits = pylonChargeLimitsForCell(bms.minCellV, bms.maxCellV);
+  uint16_t chargeCurrentLimitRaw = (uint16_t)(chargeLimits.currentA * 10.0f);
+  uint16_t chargeVoltageLimitRaw = (uint16_t)(chargeLimits.voltageV * 10.0f);
   uint16_t totalCap = 100;
+  String ruleLabel = chargeLimits.usedRule ? String(chargeLimits.matchedCellV, 2) : String("default");
 
-  uint8_t d351[8] = {0x1C, 0x02, 0xF4, 0x01, 0xF4, 0x01, 0xD6, 0x01};
+  uint8_t d351[8] = {0x1C, 0x02, 0xF4, 0x01, (uint8_t)(chargeCurrentLimitRaw & 0xFF), (uint8_t)(chargeCurrentLimitRaw >> 8), (uint8_t)(chargeVoltageLimitRaw & 0xFF), (uint8_t)(chargeVoltageLimitRaw >> 8)};
   sendCanFrame(0x351, 8, d351);
 
   uint8_t d355[8] = {(uint8_t)(avgSoc & 0xFF), (uint8_t)(avgSoc >> 8), 0x64, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -1790,6 +2103,12 @@ void sendDeyeCanTelemetry()
 
   uint8_t d35F[8] = {(uint8_t)(totalCap & 0xFF), (uint8_t)(totalCap >> 8), 0x00, 0x00, (uint8_t)(totalCap & 0xFF), (uint8_t)(totalCap >> 8), 0x01, 0x00};
   sendCanFrame(0x35F, 8, d35F);
+
+  debugPrintf("[CAN] charge limits reg0016=%u effective=%uA/%0.1fV rule=%s",
+              bms.maxChargeCurrentLimit,
+              chargeLimits.currentA,
+              chargeLimits.voltageV,
+              ruleLabel.c_str());
 }
 
 String buildSetupHtml()
@@ -1818,12 +2137,15 @@ String buildSetupHtml()
   html.replace("__LOG_BUFFER_SIZE_BMS_CAN__", String(cfg.logBufferSizeBmsCan));
   html.replace("__LOG_BUFFER_SIZE_MAX__", String(LOG_BUFFER_SIZE_MAX));
   html.replace("__LOG_DOM_LIMIT__", String(cfg.logDomLimit));
+  html.replace("__PYLON_RULES_JSON__", buildPylonRulesJson());
+  html.replace("__PYLON_RULE_MAX_COUNT__", String(PYLON_RULE_MAX_COUNT));
   html.replace("__CUSTOM_CSS_TEXT__", htmlEscape(String(cfg.customCss)));
   return html;
 }
 
 void handleDashboard()
 {
+  sendNoCacheHeaders();
   String html = FPSTR(INDEX_HTML);
   html.replace("__UI_THEME_BASE_VARS__", String(FPSTR(UI_THEME_BASE_VARS)));
   html.replace("__UI_SHARED_CSS__", String(FPSTR(UI_SHARED_CSS)));
@@ -1846,6 +2168,7 @@ void handleRoot()
 
 void handleSetup()
 {
+  sendNoCacheHeaders();
   server.send(200, "text/html", buildSetupHtml());
 }
 
@@ -1863,34 +2186,77 @@ void handleSave()
     return;
   }
 
-  copyStringField(cfg.wifiSsid, server.arg("wifi_ssid"));
+  if (server.hasArg("wifi_ssid"))
+  {
+    copyStringField(cfg.wifiSsid, server.arg("wifi_ssid"));
+  }
   if (server.hasArg("wifi_password") && server.arg("wifi_password").length() > 0)
   {
     copyStringField(cfg.wifiPassword, server.arg("wifi_password"));
   }
   cfg.wifiHidden = server.hasArg("wifi_hidden");
   cfg.enableDeyeCan = server.hasArg("enable_deye_can");
-  cfg.bmsDePin = clampPinValue(server.arg("bms_de_pin").toInt());
-  cfg.bmsRxPin = clampPinValue(server.arg("bms_rx_pin").toInt());
-  cfg.bmsTxPin = clampPinValue(server.arg("bms_tx_pin").toInt());
-  cfg.canRxPin = clampPinValue(server.arg("can_rx_pin").toInt());
-  cfg.canTxPin = clampPinValue(server.arg("can_tx_pin").toInt());
-  cfg.preferredBmsId = (uint8_t)server.arg("preferred_bms_id").toInt();
-  cfg.bmsIdMin = (uint8_t)server.arg("bms_id_min").toInt();
-  cfg.bmsIdMax = (uint8_t)server.arg("bms_id_max").toInt();
-  cfg.logBufferSizeDefault = (uint16_t)server.arg("log_buffer_size_default").toInt();
-  cfg.logBufferSizeBmsCan = (uint16_t)server.arg("log_buffer_size_bms_can").toInt();
-  cfg.logDomLimit = (uint16_t)server.arg("log_dom_limit").toInt();
-  copyStringField(cfg.customCss, server.arg("custom_css"));
+  if (server.hasArg("bms_de_pin"))
+    cfg.bmsDePin = clampPinValue(server.arg("bms_de_pin").toInt());
+  if (server.hasArg("bms_rx_pin"))
+    cfg.bmsRxPin = clampPinValue(server.arg("bms_rx_pin").toInt());
+  if (server.hasArg("bms_tx_pin"))
+    cfg.bmsTxPin = clampPinValue(server.arg("bms_tx_pin").toInt());
+  if (server.hasArg("can_rx_pin"))
+    cfg.canRxPin = clampPinValue(server.arg("can_rx_pin").toInt());
+  if (server.hasArg("can_tx_pin"))
+    cfg.canTxPin = clampPinValue(server.arg("can_tx_pin").toInt());
+  if (server.hasArg("preferred_bms_id"))
+    cfg.preferredBmsId = (uint8_t)server.arg("preferred_bms_id").toInt();
+  if (server.hasArg("bms_id_min"))
+    cfg.bmsIdMin = (uint8_t)server.arg("bms_id_min").toInt();
+  if (server.hasArg("bms_id_max"))
+    cfg.bmsIdMax = (uint8_t)server.arg("bms_id_max").toInt();
+  if (server.hasArg("log_buffer_size_default"))
+    cfg.logBufferSizeDefault = (uint16_t)server.arg("log_buffer_size_default").toInt();
+  if (server.hasArg("log_buffer_size_bms_can"))
+    cfg.logBufferSizeBmsCan = (uint16_t)server.arg("log_buffer_size_bms_can").toInt();
+  if (server.hasArg("log_dom_limit"))
+    cfg.logDomLimit = (uint16_t)server.arg("log_dom_limit").toInt();
+  if (server.hasArg("pylon_rule_count"))
+    cfg.pylonRuleCount = clampU8Value(server.arg("pylon_rule_count").toInt(), 0, PYLON_RULE_MAX_COUNT);
+  for (uint8_t i = 0; i < cfg.pylonRuleCount; i++)
+  {
+    char key[32];
+    snprintf(key, sizeof(key), "pylon_rule_%u_cell", (unsigned)i);
+    if (server.hasArg(key))
+      cfg.pylonRules[i].cellV = server.arg(key).toFloat();
+    snprintf(key, sizeof(key), "pylon_rule_%u_source", (unsigned)i);
+    if (server.hasArg(key))
+      cfg.pylonRules[i].useMinCell = server.arg(key) == "min";
+    snprintf(key, sizeof(key), "pylon_rule_%u_gt", (unsigned)i);
+    if (server.hasArg(key))
+      cfg.pylonRules[i].greaterThan = server.arg(key) == "gt";
+    snprintf(key, sizeof(key), "pylon_rule_%u_voltage", (unsigned)i);
+    if (server.hasArg(key))
+      copyTrimmedField(cfg.pylonRules[i].voltageText, server.arg(key));
+    snprintf(key, sizeof(key), "pylon_rule_%u_current", (unsigned)i);
+    if (server.hasArg(key))
+      copyTrimmedField(cfg.pylonRules[i].currentText, server.arg(key));
+  }
+  if (server.hasArg("custom_css"))
+  {
+    copyStringField(cfg.customCss, server.arg("custom_css"));
+  }
   sanitizeConfig();
   trimDebugLogState();
-  saveConfig();
-  debugPrintf("[CFG] saved ssid='%s' can=%d bms=%u range=%u..%u",
+  if (!saveConfig())
+  {
+    server.send(500, "text/plain", "Save failed. Check logs.");
+    return;
+  }
+  debugPrintf("[CFG] saved ssid='%s' can=%d bms=%u range=%u..%u rules=%u",
               cfg.wifiSsid,
               cfg.enableDeyeCan ? 1 : 0,
               cfg.preferredBmsId,
               cfg.bmsIdMin,
-              cfg.bmsIdMax);
+              cfg.bmsIdMax,
+              cfg.pylonRuleCount);
 
   String html;
   html.reserve(512);
@@ -1899,7 +2265,7 @@ void handleSave()
   html += "<title>Saved</title><style>body{font-family:Arial,Helvetica,sans-serif;background:#121212;color:#f2f2f2;padding:24px}</style></head><body>";
   html += "<h1>Saved</h1><p>Settings were saved. Rebooting now...</p></body></html>";
   server.send(200, "text/html", html);
-  scheduleReboot();
+  scheduleReboot(2500UL);
 }
 
 void handleReset()
@@ -2062,8 +2428,16 @@ String buildBadgeHtml()
   return html;
 }
 
+void sendNoCacheHeaders()
+{
+  server.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+  server.sendHeader("Pragma", "no-cache");
+  server.sendHeader("Expires", "0");
+}
+
 void handleDiag()
 {
+  sendNoCacheHeaders();
   uint16_t refreshSeconds = 0;
   if (server.hasArg("upd"))
   {
@@ -2328,6 +2702,9 @@ void fillTelemetryJson(JsonObject root)
   JsonObject limits = root.createNestedObject("limits");
   limits["remaining_ah"] = bms.remainingAh;
   limits["max_charge_current_limit"] = bms.maxChargeCurrentLimit;
+  PylonChargeLimits chargeLimits = pylonChargeLimitsForCell(bms.minCellV, bms.maxCellV);
+  limits["charge_current_limit_a"] = chargeLimits.currentA;
+  limits["charge_voltage_limit_v"] = serialized(formatJsonFloat(chargeLimits.voltageV, 1));
   limits["pack_voltage_limit"] = bms.rawRegs[0x1F];
 
   JsonObject cells = root.createNestedObject("cells");
@@ -2356,6 +2733,7 @@ void fillTelemetryJson(JsonObject root)
 
 void handleJson()
 {
+  sendNoCacheHeaders();
   DynamicJsonDocument doc(JSON_DOC_CAPACITY);
   JsonObject root = doc.to<JsonObject>();
   fillTelemetryJson(root);

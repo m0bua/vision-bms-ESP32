@@ -976,7 +976,15 @@ extern const char SETUP_HTML[] PROGMEM = R"rawliteral(
     .btn{appearance:none;border:1px solid var(--line);background:var(--accent);color:#0f1112;padding:12px 18px;border-radius:12px;font:inherit;font-weight:700;cursor:pointer}
     .btn.secondary{background:transparent;color:var(--text)}
     .note{font-size:12px;color:var(--muted);margin-top:4px}
+    .pylon-rule-row{grid-column:span 12;display:grid;grid-template-columns:repeat(12,1fr);gap:14px;align-items:end;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.02)}
+    .pylon-rule-row:hover,.pylon-rule-row:focus-within{border-color:rgba(128,203,196,.35);background:rgba(128,203,196,.05)}
+    .pylon-rule-row .field{min-width:0}
+    .pylon-rule-row .field label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .pylon-rule-row select{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font:inherit;outline:none}
+    .pylon-rule-row .btn.secondary{width:100%;min-width:0;padding:0;height:36px;display:inline-flex;align-items:center;justify-content:center;line-height:1;font-size:18px;font-weight:700}
+    .pylon-rule-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
     @media (max-width:900px){.field,.field.third,.field.half{grid-column:span 12}}
+    @media (max-width:760px){.pylon-rule-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.pylon-rule-row .field{grid-column:span 1 !important}.pylon-rule-row .field:last-child{grid-column:span 2 !important}}
   </style>
 </head>
 <body>
@@ -1073,6 +1081,20 @@ extern const char SETUP_HTML[] PROGMEM = R"rawliteral(
           </section>
 
           <section class='section'>
+            <h2 class='section-title'>Pylon limits</h2>
+            <div class='section-grid'>
+              <input type='hidden' id='pylon_rule_count' name='pylon_rule_count' value='0'>
+              <div class='field full'>
+                <div class='note'>Top matching rule wins. Each row chooses its own cell source and comparison.</div>
+                <div id='pylonRuleList' class='section-grid' style='margin-top:10px'></div>
+                <div style='margin-top:10px'>
+                  <button type='button' class='btn secondary' id='pylonRuleAdd'>Add rule</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class='section'>
             <h2 class='section-title'>CSS</h2>
             <div class='section-grid'>
               <div class='field full'>
@@ -1135,6 +1157,103 @@ extern const char SETUP_HTML[] PROGMEM = R"rawliteral(
   <script>
     const canToggle = document.getElementById('enable_deye_can');
     const canPins = document.querySelectorAll('.can-pin');
+    const pylonRuleList = document.getElementById('pylonRuleList');
+    const pylonRuleCount = document.getElementById('pylon_rule_count');
+    const pylonRules = __PYLON_RULES_JSON__;
+    const pylonRuleMaxCount = Number(__PYLON_RULE_MAX_COUNT__);
+    const escapeAttr = (value) => String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    const buildRuleRow = (rule = {}, index = 0) => {
+      const row = document.createElement('div');
+      row.className = 'pylon-rule-row';
+      row.dataset.ruleRow = '1';
+      row.innerHTML = '' +
+        '<div class="field third" style="grid-column:span 2">' +
+          '<label>Source</label>' +
+          '<select data-rule-field="source" style="width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font:inherit;outline:none">' +
+            '<option value="max"' + (rule.useMinCell ? '' : ' selected') + '>max</option>' +
+            '<option value="min"' + (rule.useMinCell ? ' selected' : '') + '>min</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="field third" style="grid-column:span 2">' +
+          '<label>Op</label>' +
+          '<select data-rule-field="op" style="width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font:inherit;outline:none">' +
+            '<option value="gt"' + (rule.greaterThan === false ? '' : ' selected') + '>&gt;</option>' +
+            '<option value="lt"' + (rule.greaterThan === false ? ' selected' : '') + '>&lt;</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="field third" style="grid-column:span 3">' +
+          '<label>Cell threshold</label>' +
+          '<input type="number" min="0" max="5" step="0.01" data-rule-field="cell" value="' + escapeAttr(rule.cellV ?? '') + '">' +
+        '</div>' +
+        '<div class="field third" style="grid-column:span 2">' +
+          '<label>Charge voltage</label>' +
+          '<input type="text" inputmode="decimal" data-rule-field="voltage" autocomplete="off" value="' + escapeAttr(rule.voltageText ?? '') + '">' +
+        '</div>' +
+        '<div class="field third" style="grid-column:span 2">' +
+          '<label>Charge current</label>' +
+          '<input type="text" inputmode="numeric" data-rule-field="current" autocomplete="off" value="' + escapeAttr(rule.currentText ?? '') + '">' +
+        '</div>' +
+        '<div class="field third" style="grid-column:span 1;min-width:84px">' +
+          '<label>&nbsp;</label>' +
+          '<div class="pylon-rule-actions">' +
+            '<button type="button" class="btn secondary" data-rule-up aria-label="Move up">↑</button>' +
+            '<button type="button" class="btn secondary" data-rule-down aria-label="Move down">↓</button>' +
+            '<button type="button" class="btn secondary" data-rule-remove aria-label="Remove rule">×</button>' +
+          '</div>' +
+        '</div>';
+      row.querySelector('[data-rule-field="cell"]').value = rule.cellV ?? '';
+      row.querySelector('[data-rule-field="source"]').value = rule.useMinCell ? 'min' : 'max';
+      row.querySelector('[data-rule-field="op"]').value = rule.greaterThan === false ? 'lt' : 'gt';
+      row.querySelector('[data-rule-field="voltage"]').value = rule.voltageText ?? '';
+      row.querySelector('[data-rule-field="current"]').value = rule.currentText ?? '';
+      row.querySelector('[data-rule-up]').addEventListener('click', () => {
+        const prev = row.previousElementSibling;
+        if (prev && prev.dataset.ruleRow === '1') {
+          row.parentElement.insertBefore(row, prev);
+          syncRuleRows();
+        }
+      });
+      row.querySelector('[data-rule-down]').addEventListener('click', () => {
+        const next = row.nextElementSibling;
+        if (next && next.dataset.ruleRow === '1') {
+          row.parentElement.insertBefore(next, row);
+          syncRuleRows();
+        }
+      });
+      row.querySelector('[data-rule-remove]').addEventListener('click', () => {
+        row.remove();
+        syncRuleRows();
+      });
+      return row;
+    };
+    const syncRuleRows = () => {
+      if (!pylonRuleList || !pylonRuleCount) return;
+      const rows = Array.from(pylonRuleList.querySelectorAll('[data-rule-row]'));
+      rows.forEach((row, index) => {
+        row.querySelector('[data-rule-field="cell"]').name = `pylon_rule_${index}_cell`;
+        row.querySelector('[data-rule-field="source"]').name = `pylon_rule_${index}_source`;
+        row.querySelector('[data-rule-field="op"]').name = `pylon_rule_${index}_gt`;
+        row.querySelector('[data-rule-field="voltage"]').name = `pylon_rule_${index}_voltage`;
+        row.querySelector('[data-rule-field="current"]').name = `pylon_rule_${index}_current`;
+      });
+      pylonRuleCount.value = String(rows.length);
+    };
+    const appendRuleRow = (rule = {}) => {
+      if (!pylonRuleList) return;
+      if (pylonRuleList.querySelectorAll('[data-rule-row]').length >= pylonRuleMaxCount) return;
+      pylonRuleList.appendChild(buildRuleRow(rule));
+      syncRuleRows();
+    };
+    if (pylonRuleList) {
+      pylonRuleList.innerHTML = '';
+      (Array.isArray(pylonRules) && pylonRules.length ? pylonRules : [{}]).forEach((rule) => appendRuleRow(rule));
+      document.getElementById('pylonRuleAdd')?.addEventListener('click', () => appendRuleRow({}));
+      syncRuleRows();
+    }
     const updateCanPins = () => {
       const show = canToggle && canToggle.checked;
       canPins.forEach((el) => {
